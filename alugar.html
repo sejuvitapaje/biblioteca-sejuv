@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alugar/Devolver - Biblioteca Municipal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">Livros <br> da <br> Sejuv</div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">
+                <i class="fas fa-book-medical"></i> Cadastrar Livro
+            </a>
+            <a href="biblioteca.html" class="nav-link">
+                <i class="fas fa-book"></i> Acervo
+            </a>
+            <a href="alugar.html" class="nav-link active">
+                <i class="fas fa-hand-holding-usd"></i> Alugar/Devolver
+            </a>
+            <a href="cliente.html" class="nav-link">
+                <i class="fas fa-users"></i> Clientes
+                <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <div class="container">
+                <h1>Alugar/Devolver Livros</h1>
+            </div>
+        </header>
+
+        <div class="container">
+            <div class="card">
+                <div class="form-title">
+                    Alugar Livro
+                </div>
+                
+                <div class="form-group">
+                    <label for="clienteNome">Nome do Cliente</label>
+                    <input type="text" id="clienteNome" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="livroAlugar">Selecionar Livro</label>
+                    <select id="livroAlugar" required>
+                        <option value="">Selecione um livro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="quantidadeAlugar">Quantidade</label>
+                    <input type="number" id="quantidadeAlugar" min="1" value="1" required>
+                </div>
+                
+                <div class="button-group">
+                    <button type="button" class="btn btn-primary" onclick="alugarLivro()">Alugar Livro</button>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 2rem;">
+                <div class="form-title">
+                    Devolver Livro
+                </div>
+                
+                <div class="form-group">
+                    <label for="livroDevolver">Selecionar Livro Alugado</label>
+                    <select id="livroDevolver" required>
+                        <option value="">Selecione um livro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="quantidadeDevolver">Quantidade</label>
+                    <input type="number" id="quantidadeDevolver" min="1" value="1" required>
+                </div>
+                
+                <div class="button-group">
+                    <button type="button" class="btn btn-success" onclick="devolverLivro()">Devolver Livro</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acervo - Biblioteca Municipal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">Livros <br> da <br> Sejuv</div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link">
+                <i class="fas fa-book-medical"></i> Cadastrar Livro
+            </a>
+            <a href="biblioteca.html" class="nav-link active">
+                <i class="fas fa-book"></i> Acervo
+            </a>
+            <a href="alugar.html" class="nav-link">
+                <i class="fas fa-hand-holding-usd"></i> Alugar/Devolver
+            </a>
+            <a href="cliente.html" class="nav-link">
+                <i class="fas fa-users"></i> Clientes
+                <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <div class="container">
+                <h1>Dados Cadastrados</h1>
+            </div>
+        </header>
+
+        <div class="container">
+            <div class="library-header">
+                <h1>Acervo da Biblioteca</h1>
+            </div>
+            
+            <div class="card">
+                <div class="search-container">
+                    <div class="form-group">
+                        <label for="searchInput">Buscar Livro</label>
+                        <input type="text" id="searchInput" placeholder="Digite o nome do livro ou autor...">
+                    </div>
+                </div>
+                
+                <div id="livrosList" class="livros-grid">
+                    <div class="loading">Carregando livros...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content card">
+            <span class="close">&times;</span>
+            <h2 style="color: var(--azul-principal); margin-bottom: 1.5rem;">Editar Livro</h2>
+            <form id="editForm">
+                <div class="form-group">
+                    <label for="editLivro">Livro:</label>
+                    <input type="text" id="editLivro" required>
+                </div>
+                <div class="form-group">
+                    <label for="editAutor">Autor:</label>
+                    <input type="text" id="editAutor" required>
+                </div>
+                <div class="form-group">
+                    <label for="editCategoria">Categoria:</label>
+                    <input type="text" id="editCategoria" required>
+                </div>
+                <div class="form-group">
+                    <label for="editQuantidade">Quantidade:</label>
+                    <input type="number" id="editQuantidade" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="editPrateleira">Prateleira:</label>
+                    <input type="text" id="editPrateleira" required>
+                </div>
+                <div class="form-group">
+                    <label for="editBandeja">Bandeja:</label>
+                    <input type="text" id="editBandeja" required>
+                </div>
+                <div class="button-group">
+                    <button type="button" class="btn btn-primary" onclick="salvarEdicao()">Salvar</button>
+                    <button type="button" class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

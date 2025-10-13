@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - Biblioteca Municipal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">Livros <br> da <br> Sejuv</div>
+        <div class="nav-links">
+            <a href="index.html" class="nav-link active">
+                <i class="fas fa-book-medical"></i> Cadastrar Livro
+            </a>
+            <a href="biblioteca.html" class="nav-link">
+                <i class="fas fa-book"></i> Acervo
+            </a>
+            <a href="alugar.html" class="nav-link">
+                <i class="fas fa-hand-holding-usd"></i> Alugar/Devolver
+            </a>
+            <a href="cliente.html" class="nav-link">
+                <i class="fas fa-users"></i> Clientes
+                <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <div class="container">
+                <h1>Cadastro de Livros</h1>
+            </div>
+        </header>
+
+        <div class="container">
+            <div id="successMessage" class="success-message">
+                Livro cadastrado com sucesso!
+            </div>
+            <div id="errorMessage" class="error-message">
+                Erro ao cadastrar livro. Tente novamente.
+            </div>
+            <div class="card login-container">
+                <div class="form-title">
+                    Cadastro de Livros
+                </div>
+                
+                <form id="formCadastro">
+                    <div class="form-group">
+                        <label for="livro">Nome do Livro</label>
+                        <input type="text" id="livro" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="autor">Autor</label>
+                        <input type="text" id="autor" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="categoria">Categoria</label>
+                        <input type="text" id="categoria" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="quantidade">Quantidade</label>
+                        <input type="number" id="quantidade" min="1" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="prateleira">Prateleira</label>
+                        <input type="text" id="prateleira" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bandeja">Bandeja</label>
+                        <input type="text" id="bandeja" required>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary">Cadastrar Livro</button>
+                        <button type="reset" class="btn btn-secondary">Limpar Campos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
