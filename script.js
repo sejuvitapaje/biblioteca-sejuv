@@ -20,6 +20,13 @@ let livros = [];
 let alugueis = [];
 let livroEditando = null;
 
+// Variáveis de paginação
+let currentPage = 1;
+const booksPerPage = 20; // Reduzido para melhor performance
+let totalLivros = 0;
+let lastVisible = null;
+let firstVisible = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     const formCadastro = document.getElementById('formCadastro');
     if (formCadastro) {
@@ -27,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     if (document.getElementById('livrosList')) {
+        inicializarPaginacao();
         carregarLivros();
     }
     
@@ -61,46 +69,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-async function cadastrarLivro(e) {
-    e.preventDefault();
-    
-    const livroData = {
-        livro: document.getElementById('livro').value.trim(),
-        autor: document.getElementById('autor').value.trim(),
-        categoria: document.getElementById('categoria').value.trim(),
-        quantidade: parseInt(document.getElementById('quantidade').value),
-        prateleira: document.getElementById('prateleira').value.trim(),
-        bandeja: document.getElementById('bandeja').value.trim(),
-        disponivel: true,
-        dataCadastro: new Date()
-    };
-    
-    if (Object.values(livroData).some(valor => valor === '' || (typeof valor === 'string' && !valor.trim()) || (typeof valor === 'number' && isNaN(valor)))) {
-        alert("Por favor, preencha todos os campos corretamente!");
-        return;
+function inicializarPaginacao() {
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    const prevBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
+    const searchInput = document.getElementById('searchInput');
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => mudarPagina('prev'));
+        nextBtn.addEventListener('click', () => mudarPagina('next'));
+        prevBtnBottom.addEventListener('click', () => mudarPagina('prev'));
+        nextBtnBottom.addEventListener('click', () => mudarPagina('next'));
     }
-    
-    try {
-        await db.collection('livros').add(livroData);
-        document.getElementById('formCadastro').reset();
-        
-        const successMessage = document.getElementById('successMessage');
-        const errorMessage = document.getElementById('errorMessage');
-        successMessage.style.display = 'block';
-        errorMessage.style.display = 'none';
-        setTimeout(() => {
-            successMessage.style.display = 'none';
-        }, 3000);
-        
-    } catch (error) {
-        console.error('Erro ao cadastrar livro:', error);
-        const successMessage = document.getElementById('successMessage');
-        const errorMessage = document.getElementById('errorMessage');
-        successMessage.style.display = 'none';
-        errorMessage.style.display = 'block';
-        setTimeout(() => {
-            errorMessage.style.display = 'none';
-        }, 3000);
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filtrarLivros);
     }
 }
 
@@ -111,11 +95,25 @@ async function carregarLivros() {
     livrosList.innerHTML = '<div class="loading">Carregando livros...</div>';
     
     try {
-        const snapshot = await db.collection('livros').orderBy('dataCadastro', 'desc').get();
+        // Busca o total de livros
+        const countSnapshot = await db.collection('livros').get();
+        totalLivros = countSnapshot.size;
+        
+        document.getElementById('totalLivros').textContent = `${totalLivros} livros cadastrados`;
+        
+        // Carrega primeira página
+        const snapshot = await db.collection('livros')
+            .orderBy('dataCadastro', 'desc')
+            .limit(booksPerPage)
+            .get();
+            
         livros = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         }));
+        
+        lastVisible = snapshot.docs[snapshot.docs.length - 1];
+        firstVisible = snapshot.docs[0];
         
         const alugueisSnapshot = await db.collection('alugueis')
             .where('dataDevolucao', '==', null)
@@ -125,25 +123,77 @@ async function carregarLivros() {
             ...doc.data()
         }));
         
-        if (!document.getElementById('searchInput')) {
-            const searchContainer = document.createElement('div');
-            searchContainer.className = 'search-container';
-            searchContainer.innerHTML = `
-                <div class="form-group">
-                    <label for="searchInput">Buscar Livro</label>
-                    <input type="text" id="searchInput" placeholder="Digite o nome do livro ou autor...">
-                </div>
-            `;
-            livrosList.parentNode.insertBefore(searchContainer, livrosList);
-            
-            document.getElementById('searchInput').addEventListener('input', filtrarLivros);
-        }
-        
         exibirLivros(livros);
+        atualizarControlesPaginacao();
         
     } catch (error) {
         console.error('Erro ao carregar livros:', error);
         livrosList.innerHTML = '<div class="empty-state">Erro ao carregar livros. Tente novamente.</div>';
+    }
+}
+
+async function mudarPagina(direction) {
+    const livrosList = document.getElementById('livrosList');
+    if (!livrosList) return;
+    
+    livrosList.innerHTML = '<div class="loading">Carregando...</div>';
+    
+    try {
+        let snapshot;
+        let query = db.collection('livros').orderBy('dataCadastro', 'desc');
+        
+        if (direction === 'next' && lastVisible) {
+            snapshot = await query.startAfter(lastVisible).limit(booksPerPage).get();
+            currentPage++;
+        } else if (direction === 'prev' && firstVisible) {
+            snapshot = await query.endBefore(firstVisible).limitToLast(booksPerPage).get();
+            currentPage--;
+        } else {
+            snapshot = await query.limit(booksPerPage).get();
+            currentPage = 1;
+        }
+        
+        if (snapshot.empty) {
+            livrosList.innerHTML = '<div class="empty-state">Nenhum livro encontrado.</div>';
+            return;
+        }
+        
+        livros = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        lastVisible = snapshot.docs[snapshot.docs.length - 1];
+        firstVisible = snapshot.docs[0];
+        
+        exibirLivros(livros);
+        atualizarControlesPaginacao();
+        
+    } catch (error) {
+        console.error('Erro ao mudar página:', error);
+        livrosList.innerHTML = '<div class="empty-state">Erro ao carregar página.</div>';
+    }
+}
+
+function atualizarControlesPaginacao() {
+    const totalPages = Math.ceil(totalLivros / booksPerPage);
+    const pageInfo = `Página ${currentPage} de ${totalPages}`;
+    const resultsInfo = `${livros.length} livros nesta página`;
+    
+    document.getElementById('pageInfo').textContent = pageInfo;
+    document.getElementById('pageInfoBottom').textContent = pageInfo;
+    document.getElementById('resultsInfo').textContent = resultsInfo;
+    
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    const prevBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
+    
+    if (prevBtn) {
+        prevBtn.disabled = currentPage === 1;
+        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+        prevBtnBottom.disabled = currentPage === 1;
+        nextBtnBottom.disabled = currentPage === totalPages || totalPages === 0;
     }
 }
 
@@ -219,7 +269,8 @@ function filtrarLivros() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     
     if (!searchTerm) {
-        exibirLivros(livros);
+        // Se busca vazia, volta para paginação normal
+        carregarLivros();
         return;
     }
     
@@ -229,7 +280,20 @@ function filtrarLivros() {
     );
     
     exibirLivros(livrosFiltrados);
+    
+    // Atualiza controles para modo busca
+    document.getElementById('pageInfo').textContent = 'Modo Busca';
+    document.getElementById('pageInfoBottom').textContent = 'Modo Busca';
+    document.getElementById('resultsInfo').textContent = `${livrosFiltrados.length} livros encontrados`;
+    
+    // Desabilita paginação durante busca
+    document.getElementById('prevPage').disabled = true;
+    document.getElementById('nextPage').disabled = true;
+    document.getElementById('prevPageBottom').disabled = true;
+    document.getElementById('nextPageBottom').disabled = true;
 }
+
+// ... (o resto das funções permanece igual - cadastrarLivro, carregarLivrosDisponiveis, etc.)
 
 async function carregarLivrosDisponiveis() {
     const select = document.getElementById('livroAlugar');
@@ -321,7 +385,7 @@ async function alugarLivro() {
             quantidade: quantidade,
             dataAluguel: new Date(),
             dataDevolucao: null,
-            prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias
+            prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         };
         
         await db.collection('alugueis').add(aluguelData);
