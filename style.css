@@ -215,11 +215,22 @@ input:focus, select:focus {
     transform: translateY(-2px);
 }
 
+.btn:disabled {
+    background: var(--cinza-claro);
+    color: var(--cinza-escuro);
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn:disabled:hover {
+    transform: none;
+}
+
 .livros-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
     gap: 1.5rem;
-    margin-top: 1.5rem;
+    margin: 1.5rem 0;
 }
 
 .livro-card {
@@ -229,6 +240,7 @@ input:focus, select:focus {
     box-shadow: var(--sombra);
     border-left: 5px solid var(--azul-claro);
     transition: transform 0.3s ease;
+    position: relative;
 }
 
 .livro-card:hover {
@@ -237,18 +249,20 @@ input:focus, select:focus {
 
 .livro-card.alugado {
     border-left-color: var(--vermelho);
-    opacity: 0.8;
+    opacity: 0.9;
 }
 
 .livro-card h3 {
     color: var(--azul-principal);
     margin-bottom: 1rem;
     font-size: 1.2rem;
+    line-height: 1.4;
 }
 
 .livro-info {
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
+    line-height: 1.4;
 }
 
 .data-cadastro {
@@ -306,12 +320,14 @@ input:focus, select:focus {
     padding: 2rem;
     color: var(--cinza-escuro);
     font-style: italic;
+    grid-column: 1 / -1;
 }
 
 .empty-state {
     text-align: center;
     padding: 3rem;
     color: var(--cinza-escuro);
+    grid-column: 1 / -1;
 }
 
 .empty-state h3 {
@@ -383,6 +399,53 @@ input:focus, select:focus {
 .library-header h1 {
     color: var(--azul-principal);
     font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.library-stats {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.library-stats span {
+    background: var(--azul-claro);
+    color: var(--branco);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 1.5rem 0;
+    padding: 1rem 0;
+    border-top: 1px solid var(--cinza-claro);
+    border-bottom: 1px solid var(--cinza-claro);
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.page-info span {
+    font-weight: 600;
+    color: var(--azul-principal);
+}
+
+.results-info {
+    font-size: 0.8rem;
+    color: var(--cinza-escuro) !important;
+    font-weight: normal !important;
 }
 
 .clientes-grid {
@@ -583,6 +646,16 @@ input:focus, select:focus {
         font-size: 2rem;
     }
     
+    .library-stats {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .pagination-controls {
+        flex-direction: column;
+        text-align: center;
+    }
+    
     .clientes-header {
         flex-direction: column;
         align-items: flex-start;
@@ -628,5 +701,9 @@ input:focus, select:focus {
     .modal-content {
         margin: 2% auto;
         max-height: 80vh;
+    }
+    
+    .library-header h1 {
+        font-size: 1.8rem;
     }
 }
