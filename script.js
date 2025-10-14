@@ -10,8 +10,9 @@ const firebaseConfig = {
 
 try {
     firebase.initializeApp(firebaseConfig);
+    console.log("🔥 Firebase inicializado com sucesso!");
 } catch (error) {
-    console.error("Erro ao inicializar Firebase:", error);
+    console.error("❌ Erro ao inicializar Firebase:", error);
 }
 
 const db = firebase.firestore();
@@ -22,31 +23,38 @@ let livroEditando = null;
 
 // Variáveis de paginação
 let currentPage = 1;
-const booksPerPage = 20; // Reduzido para melhor performance
+const booksPerPage = 20;
 let totalLivros = 0;
 let lastVisible = null;
 let firstVisible = null;
 
 document.addEventListener('DOMContentLoaded', function() {
+    console.log("📚 Biblioteca carregada!");
+    
     const formCadastro = document.getElementById('formCadastro');
     if (formCadastro) {
         formCadastro.addEventListener('submit', cadastrarLivro);
+        console.log("✅ Formulário de cadastro configurado");
     }
     
     if (document.getElementById('livrosList')) {
+        console.log("📖 Página da biblioteca detectada");
         inicializarPaginacao();
         carregarLivros();
     }
     
     if (document.getElementById('livroAlugar')) {
+        console.log("💰 Página de aluguel detectada");
         carregarLivrosDisponiveis();
     }
     
     if (document.getElementById('livroDevolver')) {
+        console.log("🔄 Página de devolução detectada");
         carregarLivrosAlugados();
     }
     
     if (document.getElementById('clientesList')) {
+        console.log("👥 Página de clientes detectada");
         carregarClientes();
     }
     
@@ -95,9 +103,12 @@ async function carregarLivros() {
     livrosList.innerHTML = '<div class="loading">Carregando livros...</div>';
     
     try {
+        console.log("🔄 Buscando livros no Firebase...");
+        
         // Busca o total de livros
         const countSnapshot = await db.collection('livros').get();
         totalLivros = countSnapshot.size;
+        console.log(`📊 Total de livros: ${totalLivros}`);
         
         document.getElementById('totalLivros').textContent = `${totalLivros} livros cadastrados`;
         
@@ -107,6 +118,8 @@ async function carregarLivros() {
             .limit(booksPerPage)
             .get();
             
+        console.log(`📚 ${snapshot.size} livros carregados`);
+        
         livros = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -127,7 +140,7 @@ async function carregarLivros() {
         atualizarControlesPaginacao();
         
     } catch (error) {
-        console.error('Erro ao carregar livros:', error);
+        console.error('❌ Erro ao carregar livros:', error);
         livrosList.innerHTML = '<div class="empty-state">Erro ao carregar livros. Tente novamente.</div>';
     }
 }
@@ -170,7 +183,7 @@ async function mudarPagina(direction) {
         atualizarControlesPaginacao();
         
     } catch (error) {
-        console.error('Erro ao mudar página:', error);
+        console.error('❌ Erro ao mudar página:', error);
         livrosList.innerHTML = '<div class="empty-state">Erro ao carregar página.</div>';
     }
 }
@@ -293,7 +306,59 @@ function filtrarLivros() {
     document.getElementById('nextPageBottom').disabled = true;
 }
 
-// ... (o resto das funções permanece igual - cadastrarLivro, carregarLivrosDisponiveis, etc.)
+async function cadastrarLivro(e) {
+    e.preventDefault();
+    
+    console.log("🎯 Botão de cadastro clicado!");
+    
+    const livroData = {
+        livro: document.getElementById('livro').value.trim(),
+        autor: document.getElementById('autor').value.trim(),
+        categoria: document.getElementById('categoria').value.trim(),
+        quantidade: parseInt(document.getElementById('quantidade').value),
+        prateleira: document.getElementById('prateleira').value.trim(),
+        bandeja: document.getElementById('bandeja').value.trim(),
+        disponivel: true,
+        dataCadastro: new Date()
+    };
+    
+    console.log("📝 Dados do livro:", livroData);
+    
+    // Validação
+    if (Object.values(livroData).some(valor => valor === '' || (typeof valor === 'string' && !valor.trim()) || (typeof valor === 'number' && isNaN(valor)))) {
+        alert("Por favor, preencha todos os campos corretamente!");
+        return;
+    }
+    
+    try {
+        console.log("📦 Salvando no Firebase...");
+        const docRef = await db.collection('livros').add(livroData);
+        console.log("✅ Livro cadastrado com ID:", docRef.id);
+        
+        document.getElementById('formCadastro').reset();
+        
+        // Mostrar mensagem de sucesso
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        successMessage.style.display = 'block';
+        errorMessage.style.display = 'none';
+        setTimeout(() => {
+            successMessage.style.display = 'none';
+        }, 3000);
+        
+        console.log("🎉 Livro cadastrado com sucesso!");
+        
+    } catch (error) {
+        console.error('❌ Erro ao cadastrar livro:', error);
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        successMessage.style.display = 'none';
+        errorMessage.style.display = 'block';
+        setTimeout(() => {
+            errorMessage.style.display = 'none';
+        }, 3000);
+    }
+}
 
 async function carregarLivrosDisponiveis() {
     const select = document.getElementById('livroAlugar');
@@ -326,8 +391,10 @@ async function carregarLivrosDisponiveis() {
                 select.appendChild(option);
             }
         });
+        
+        console.log(`💰 ${select.children.length - 1} livros disponíveis para aluguel`);
     } catch (error) {
-        console.error('Erro ao carregar livros disponíveis:', error);
+        console.error('❌ Erro ao carregar livros disponíveis:', error);
     }
 }
 
@@ -355,8 +422,10 @@ async function carregarLivrosAlugados() {
                 select.appendChild(option);
             }
         }
+        
+        console.log(`🔄 ${select.children.length - 1} livros alugados encontrados`);
     } catch (error) {
-        console.error('Erro ao carregar livros alugados:', error);
+        console.error('❌ Erro ao carregar livros alugados:', error);
     }
 }
 
@@ -398,8 +467,10 @@ async function alugarLivro() {
         carregarLivrosDisponiveis();
         atualizarNotificacoes();
         
+        console.log("📚 Livro alugado com sucesso!");
+        
     } catch (error) {
-        console.error('Erro ao alugar livro:', error);
+        console.error('❌ Erro ao alugar livro:', error);
         alert('Erro ao alugar livro. Tente novamente.');
     }
 }
@@ -441,8 +512,10 @@ async function devolverLivro() {
         carregarLivrosAlugados();
         atualizarNotificacoes();
         
+        console.log("🔄 Livro devolvido com sucesso!");
+        
     } catch (error) {
-        console.error('Erro ao devolver livro:', error);
+        console.error('❌ Erro ao devolver livro:', error);
         alert('Erro ao devolver livro. Tente novamente.');
     }
 }
@@ -532,9 +605,10 @@ async function carregarClientes() {
         }
         
         clientesList.innerHTML = clientesHTML;
+        console.log(`👥 ${alugueisAtivos.length} clientes carregados`);
         
     } catch (error) {
-        console.error('Erro ao carregar clientes:', error);
+        console.error('❌ Erro ao carregar clientes:', error);
         clientesList.innerHTML = '<div class="empty-state">Erro ao carregar clientes. Tente novamente.</div>';
     }
 }
@@ -568,12 +642,13 @@ async function atualizarNotificacoes() {
         if (notificacoes > 0) {
             badge.textContent = notificacoes;
             badge.style.display = 'flex';
+            console.log(`🔔 ${notificacoes} notificações de prazo`);
         } else {
             badge.style.display = 'none';
         }
         
     } catch (error) {
-        console.error('Erro ao atualizar notificações:', error);
+        console.error('❌ Erro ao atualizar notificações:', error);
     }
 }
 
@@ -588,7 +663,7 @@ function formatarData(data) {
         const date = new Date(data);
         return date.toLocaleDateString('pt-BR');
     } catch (error) {
-        console.error('Erro ao formatar data:', error);
+        console.error('❌ Erro ao formatar data:', error);
         return 'Data inválida';
     }
 }
@@ -605,6 +680,8 @@ function editarLivro(livroId) {
         document.getElementById('editBandeja').value = livroEditando.bandeja || '';
         
         document.getElementById('editModal').style.display = 'block';
+        
+        console.log("✏️ Editando livro:", livroEditando.livro);
     }
 }
 
@@ -624,8 +701,10 @@ async function salvarEdicao() {
         await carregarLivros();
         fecharModal();
         alert('Livro atualizado com sucesso!');
+        
+        console.log("✅ Livro atualizado:", livroEditando.id);
     } catch (error) {
-        console.error('Erro ao atualizar livro:', error);
+        console.error('❌ Erro ao atualizar livro:', error);
         alert('Erro ao atualizar livro. Tente novamente.');
     }
 }
@@ -636,8 +715,10 @@ async function excluirLivro(livroId) {
             await db.collection('livros').doc(livroId).delete();
             await carregarLivros();
             alert('Livro excluído com sucesso!');
+            
+            console.log("🗑️ Livro excluído:", livroId);
         } catch (error) {
-            console.error('Erro ao excluir livro:', error);
+            console.error('❌ Erro ao excluir livro:', error);
             alert('Erro ao excluir livro. Tente novamente.');
         }
     }
@@ -649,4 +730,5 @@ function fecharModal() {
         modal.style.display = 'none';
     }
     livroEditando = null;
+    console.log("❌ Modal fechado");
 }
