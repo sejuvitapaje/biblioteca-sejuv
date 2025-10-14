@@ -39,6 +39,10 @@
         <div class="container">
             <div class="library-header">
                 <h1>Acervo da Biblioteca</h1>
+                <div class="library-stats">
+                    <span id="totalLivros">Carregando...</span>
+                    <span id="paginaInfo">Página 1</span>
+                </div>
             </div>
             
             <div class="card">
@@ -48,9 +52,39 @@
                         <input type="text" id="searchInput" placeholder="Digite o nome do livro ou autor...">
                     </div>
                 </div>
+
+                <!-- Controles de Paginação -->
+                <div class="pagination-controls">
+                    <button id="prevPage" class="btn btn-secondary" disabled>
+                        <i class="fas fa-chevron-left"></i> Anterior
+                    </button>
+                    
+                    <div class="page-info">
+                        <span id="pageInfo">Página 1 de 1</span>
+                        <span class="results-info" id="resultsInfo">0 livros</span>
+                    </div>
+                    
+                    <button id="nextPage" class="btn btn-secondary" disabled>
+                        Próxima <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
                 
                 <div id="livrosList" class="livros-grid">
                     <div class="loading">Carregando livros...</div>
+                </div>
+
+                <div class="pagination-controls">
+                    <button id="prevPageBottom" class="btn btn-secondary" disabled>
+                        <i class="fas fa-chevron-left"></i> Anterior
+                    </button>
+                    
+                    <div class="page-info">
+                        <span id="pageInfoBottom">Página 1 de 1</span>
+                    </div>
+                    
+                    <button id="nextPageBottom" class="btn btn-secondary" disabled>
+                        Próxima <i class="fas fa-chevron-right"></i>
+                    </button>
                 </div>
             </div>
         </div>
