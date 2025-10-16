@@ -707,3 +707,132 @@ input:focus, select:focus {
         font-size: 1.8rem;
     }
 }
+
+/* Estilos para a nova interface de aluguel */
+.search-box {
+    position: relative;
+}
+
+.search-box input {
+    padding-right: 2.5rem;
+}
+
+.search-box .fa-search {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--cinza-escuro);
+}
+
+.livros-disponiveis-grid,
+.livros-alugados-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border: 1px solid var(--cinza-claro);
+    border-radius: 8px;
+    background: var(--cinza-claro);
+}
+
+.livro-disponivel-card,
+.livro-alugado-card {
+    background: var(--branco);
+    border-radius: 8px;
+    padding: 1rem;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--sombra);
+}
+
+.livro-disponivel-card:hover,
+.livro-alugado-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--azul-claro);
+}
+
+.livro-disponivel-card.selecionado,
+.livro-alugado-card.selecionado {
+    border-color: var(--verde);
+    background: linear-gradient(135deg, var(--branco) 0%, rgba(39, 174, 96, 0.1) 100%);
+}
+
+.livro-disponivel-card h4,
+.livro-alugado-card h4 {
+    color: var(--azul-principal);
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.livro-disponivel-info,
+.livro-alugado-info {
+    font-size: 0.8rem;
+    color: var(--cinza-escuro);
+    margin-bottom: 0.25rem;
+}
+
+.quantidade-info {
+    font-weight: bold;
+    color: var(--verde);
+}
+
+.quantidade-info.pouco {
+    color: var(--laranja);
+}
+
+.quantidade-info.indisponivel {
+    color: var(--vermelho);
+}
+
+.livro-selecionado-card {
+    background: linear-gradient(135deg, var(--branco) 0%, rgba(52, 152, 219, 0.1) 100%);
+    border: 2px solid var(--azul-claro);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+}
+
+.livro-selecionado-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.livro-selecionado-header h4 {
+    color: var(--azul-principal);
+    margin: 0;
+}
+
+.livro-selecionado-header span {
+    font-weight: bold;
+    color: var(--verde);
+    font-size: 1.1rem;
+}
+
+small {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--cinza-escuro);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 768px) {
+    .livros-disponiveis-grid,
+    .livros-alugados-grid {
+        grid-template-columns: 1fr;
+        max-height: 300px;
+    }
+    
+    .livro-selecionado-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
