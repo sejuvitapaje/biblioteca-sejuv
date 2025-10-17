@@ -37,6 +37,10 @@ let livroSelecionadoDevolver = null;
 let livrosDisponiveis = [];
 let livrosAlugados = [];
 
+// Cache para otimização
+let cacheCarregado = false;
+let alugueisCarregados = false;
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log("📚 Biblioteca carregada!");
     
@@ -89,14 +93,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Carrega TODOS os livros para busca global
+// Carrega TODOS os livros para busca global (UMA VEZ por sessão)
 async function carregarTodosLivros() {
+    if (cacheCarregado) {
+        console.log("♻️ Usando cache de livros");
+        return;
+    }
+    
     try {
         const snapshot = await db.collection('livros').get();
         todosLivros = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         }));
+        cacheCarregado = true;
         console.log(`🌍 ${todosLivros.length} livros carregados para busca global`);
     } catch (error) {
         console.error('❌ Erro ao carregar todos os livros:', error);
@@ -139,6 +149,7 @@ function inicializarBuscaDevolucao() {
     }
 }
 
+// ✅ FUNÇÃO CORRIGIDA - PERFORMANCE OTIMIZADA
 async function carregarLivros() {
     const livrosList = document.getElementById('livrosList');
     if (!livrosList) return;
@@ -153,12 +164,15 @@ async function carregarLivros() {
     try {
         console.log("🔄 Buscando livros no Firebase...");
         
-        const countSnapshot = await db.collection('livros').get();
-        totalLivros = countSnapshot.size;
-        console.log(`📊 Total de livros: ${totalLivros}`);
+        // ✅ CORREÇÃO: Só conta total UMA VEZ por sessão
+        if (totalLivros === 0) {
+            const countSnapshot = await db.collection('livros').get();
+            totalLivros = countSnapshot.size;
+            console.log(`📊 Total de livros: ${totalLivros}`);
+            document.getElementById('totalLivros').textContent = `${totalLivros} livros cadastrados`;
+        }
         
-        document.getElementById('totalLivros').textContent = `${totalLivros} livros cadastrados`;
-        
+        // ✅ CORREÇÃO: Busca apenas a página necessária
         const snapshot = await db.collection('livros')
             .orderBy('dataCadastro', 'desc')
             .limit(booksPerPage)
@@ -174,13 +188,17 @@ async function carregarLivros() {
         lastVisible = snapshot.docs[snapshot.docs.length - 1];
         firstVisible = snapshot.docs[0];
         
-        const alugueisSnapshot = await db.collection('alugueis')
-            .where('dataDevolucao', '==', null)
-            .get();
-        alugueis = alugueisSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        // ✅ CORREÇÃO: Carrega aluguéis apenas UMA VEZ
+        if (!alugueisCarregados) {
+            const alugueisSnapshot = await db.collection('alugueis')
+                .where('dataDevolucao', '==', null)
+                .get();
+            alugueis = alugueisSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            alugueisCarregados = true;
+        }
         
         exibirLivros(livros);
         atualizarControlesPaginacao();
@@ -429,6 +447,10 @@ async function cadastrarLivro(e) {
         const docRef = await db.collection('livros').add(livroData);
         console.log("✅ Livro cadastrado com ID:", docRef.id);
         
+        // ✅ CORREÇÃO: Atualiza cache local
+        cacheCarregado = false;
+        totalLivros = 0; // Força recontagem
+        
         await carregarTodosLivros();
         
         document.getElementById('formCadastro').reset();
@@ -462,7 +484,20 @@ async function carregarLivrosDisponiveis() {
     grid.innerHTML = '<div class="loading">Carregando livros disponíveis...</div>';
     
     try {
-        const livrosSnapshot = await db.collection('livros').get();
+        // ✅ CORREÇÃO: Usa cache quando possível
+        let livrosParaProcessar = [];
+        
+        if (cacheCarregado) {
+            livrosParaProcessar = todosLivros;
+            console.log("♻️ Usando cache para livros disponíveis");
+        } else {
+            const livrosSnapshot = await db.collection('livros').get();
+            livrosParaProcessar = livrosSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        }
+        
         const alugueisSnapshot = await db.collection('alugueis')
             .where('dataDevolucao', '==', null)
             .get();
@@ -474,8 +509,7 @@ async function carregarLivrosDisponiveis() {
         
         livrosDisponiveis = [];
         
-        for (const doc of livrosSnapshot.docs) {
-            const livro = { id: doc.id, ...doc.data() };
+        for (const livro of livrosParaProcessar) {
             const alugueisDoLivro = alugueisAtivos.filter(a => a.livroId === livro.id);
             const quantidadeAlugada = alugueisDoLivro.reduce((total, aluguel) => total + aluguel.quantidade, 0);
             const quantidadeDisponivel = livro.quantidade - quantidadeAlugada;
@@ -513,10 +547,18 @@ async function carregarLivrosAlugados() {
         
         for (const doc of alugueisSnapshot.docs) {
             const aluguel = { id: doc.id, ...doc.data() };
-            const livroDoc = await db.collection('livros').doc(aluguel.livroId).get();
             
-            if (livroDoc.exists) {
-                const livro = livroDoc.data();
+            // ✅ CORREÇÃO: Tenta usar cache primeiro
+            let livro = todosLivros.find(l => l.id === aluguel.livroId);
+            
+            if (!livro) {
+                const livroDoc = await db.collection('livros').doc(aluguel.livroId).get();
+                if (livroDoc.exists) {
+                    livro = livroDoc.data();
+                }
+            }
+            
+            if (livro) {
                 livrosAlugados.push({
                     id: aluguel.id,
                     livroId: aluguel.livroId,
@@ -705,6 +747,9 @@ async function alugarLivro() {
         document.getElementById('btnAlugar').disabled = true;
         livroSelecionadoAlugar = null;
         
+        // ✅ CORREÇÃO: Limpa cache para forçar atualização
+        alugueisCarregados = false;
+        
         await carregarLivrosDisponiveis();
         await carregarLivrosAlugados();
         atualizarNotificacoes();
@@ -749,6 +794,9 @@ async function devolverLivro() {
         document.getElementById('livroDevolucaoSelecionadoCard').style.display = 'none';
         document.getElementById('btnDevolver').disabled = true;
         livroSelecionadoDevolver = null;
+        
+        // ✅ CORREÇÃO: Limpa cache para forçar atualização
+        alugueisCarregados = false;
         
         await carregarLivrosDisponiveis();
         await carregarLivrosAlugados();
@@ -945,6 +993,10 @@ async function salvarEdicao() {
             bandeja: document.getElementById('editBandeja').value.trim()
         });
         
+        // ✅ CORREÇÃO: Limpa cache para forçar atualização
+        cacheCarregado = false;
+        totalLivros = 0;
+        
         await carregarTodosLivros();
         await carregarLivros();
         
@@ -954,7 +1006,7 @@ async function salvarEdicao() {
         console.log("✅ Livro atualizado:", livroEditando.id);
     } catch (error) {
         console.error('❌ Erro ao atualizar livro:', error);
-        alert('Erro ao atualizar livro. Tente novamente.');
+        alert('Erro ao atualizar livro. Trente novamente.');
     }
 }
 
@@ -962,6 +1014,10 @@ async function excluirLivro(livroId) {
     if (confirm('Tem certeza que deseja excluir este livro?')) {
         try {
             await db.collection('livros').doc(livroId).delete();
+            
+            // ✅ CORREÇÃO: Limpa cache para forçar atualização
+            cacheCarregado = false;
+            totalLivros = 0;
             
             await carregarTodosLivros();
             await carregarLivros();
