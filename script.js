@@ -28,8 +28,6 @@ let livroEditando = null;
 let currentPage = 1;
 const booksPerPage = 20;
 let totalLivros = 0;
-let lastVisible = null;
-let firstVisible = null;
 let buscaAtiva = false;
 let termoBusca = '';
 
@@ -39,43 +37,36 @@ let livroSelecionadoDevolver = null;
 let livrosDisponiveis = [];
 let livrosAlugados = [];
 
-// Cache para otimização
+// ✅ CACHE OTIMIZADO
 let cacheCarregado = false;
 let alugueisCarregados = false;
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log("📚 Biblioteca carregada!");
     
-    // Configurar formulário de cadastro
     const formCadastro = document.getElementById('formCadastro');
     if (formCadastro) {
         formCadastro.addEventListener('submit', cadastrarLivro);
-        console.log("✅ Formulário de cadastro configurado");
     }
     
-    // Configurar página da biblioteca
     if (document.getElementById('livrosList')) {
         console.log("📖 Página da biblioteca detectada");
         inicializarPaginacao();
-        carregarTodosLivros();
         carregarLivros();
     }
     
-    // Configurar página de aluguel
     if (document.getElementById('buscaLivroAlugar')) {
         console.log("💰 Página de aluguel detectada");
         inicializarBuscaAluguel();
         carregarLivrosDisponiveis();
     }
     
-    // Configurar página de devolução
     if (document.getElementById('buscaLivroDevolver')) {
         console.log("🔄 Página de devolução detectada");
         inicializarBuscaDevolucao();
         carregarLivrosAlugados();
     }
     
-    // Configurar modal de edição
     const modal = document.getElementById('editModal');
     if (modal) {
         const closeBtn = modal.querySelector('.close');
@@ -93,115 +84,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// ✅ FUNÇÃO OTIMIZADA - Carrega TODOS os livros para busca
-async function carregarTodosLivros() {
-    if (cacheCarregado) {
-        console.log("♻️ Usando cache de livros");
-        return;
-    }
-    
-    try {
-        console.log("📥 Carregando todos os livros...");
-        const snapshot = await db.collection('livros').get();
-        todosLivros = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        cacheCarregado = true;
-        console.log(`🌍 ${todosLivros.length} livros carregados para busca global`);
-    } catch (error) {
-        console.error('❌ Erro ao carregar todos os livros:', error);
-    }
-}
-
-// ✅ FUNÇÃO CORRIGIDA - Carrega livros com paginação
-async function carregarLivros() {
-    const livrosList = document.getElementById('livrosList');
-    if (!livrosList) return;
-    
-    if (buscaAtiva) {
-        aplicarFiltroBusca();
-        return;
-    }
-    
-    livrosList.innerHTML = '<div class="loading">Carregando livros...</div>';
-    
-    try {
-        console.log("🔄 Buscando livros no Firebase...");
-        
-        // Busca apenas a página necessária
-        let query = db.collection('livros').orderBy('dataCadastro', 'desc');
-        
-        if (currentPage > 1 && lastVisible) {
-            query = query.startAfter(lastVisible);
-        }
-        
-        const snapshot = await query.limit(booksPerPage).get();
-        
-        console.log(`📚 ${snapshot.size} livros carregados`);
-        
-        if (snapshot.empty && currentPage > 1) {
-            currentPage = 1;
-            await carregarLivros();
-            return;
-        }
-        
-        livros = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        
-        lastVisible = snapshot.docs[snapshot.docs.length - 1];
-        firstVisible = snapshot.docs[0];
-        
-        // Atualiza contagem total apenas uma vez
-        if (totalLivros === 0) {
-            const countSnapshot = await db.collection('livros').get();
-            totalLivros = countSnapshot.size;
-            console.log(`📊 Total de livros: ${totalLivros}`);
-            const totalElement = document.getElementById('totalLivros');
-            if (totalElement) {
-                totalElement.textContent = `${totalLivros} livros cadastrados`;
-            }
-        }
-        
-        // Carrega aluguéis apenas uma vez
-        if (!alugueisCarregados) {
-            await carregarAlugueisAtivos();
-        }
-        
-        exibirLivros(livros);
-        atualizarControlesPaginacao();
-        
-    } catch (error) {
-        console.error('❌ Erro ao carregar livros:', error);
-        livrosList.innerHTML = '<div class="empty-state">Erro ao carregar livros. Tente novamente.</div>';
-    }
-}
-
-// ✅ FUNÇÃO OTIMIZADA - Carrega aluguéis ativos
-async function carregarAlugueisAtivos() {
-    try {
-        const alugueisSnapshot = await db.collection('alugueis')
-            .where('dataDevolucao', '==', null)
-            .get();
-        
-        alugueis = alugueisSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        alugueisCarregados = true;
-        console.log(`📋 ${alugueis.length} aluguéis ativos carregados`);
-    } catch (error) {
-        console.error('❌ Erro ao carregar aluguéis:', error);
-    }
-}
-
 function inicializarPaginacao() {
     const prevBtn = document.getElementById('prevPage');
     const nextBtn = document.getElementById('nextPage');
     const prevBtnBottom = document.getElementById('prevPageBottom');
-    const nextBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
     const searchInput = document.getElementById('searchInput');
 
     if (prevBtn) {
@@ -212,7 +99,6 @@ function inicializarPaginacao() {
     }
 
     if (searchInput) {
-        // Debounce para busca
         let timeout;
         searchInput.addEventListener('input', (e) => {
             clearTimeout(timeout);
@@ -250,52 +136,92 @@ function inicializarBuscaDevolucao() {
     }
 }
 
-async function mudarPagina(direction) {
-    if (buscaAtiva) {
-        mudarPaginaBusca(direction);
-        return;
-    }
-    
+// ✅✅✅ FUNÇÃO PRINCIPAL CORRIGIDA - MÍNIMO DE LEITURAS
+async function carregarLivros() {
     const livrosList = document.getElementById('livrosList');
     if (!livrosList) return;
     
-    livrosList.innerHTML = '<div class="loading">Carregando...</div>';
+    if (buscaAtiva) {
+        aplicarFiltroBusca();
+        return;
+    }
+    
+    livrosList.innerHTML = '<div class="loading">Carregando livros...</div>';
     
     try {
-        let query = db.collection('livros').orderBy('dataCadastro', 'desc');
-        let snapshot;
+        console.log("🔄 Buscando livros no Firebase...");
         
-        if (direction === 'next' && lastVisible) {
-            snapshot = await query.startAfter(lastVisible).limit(booksPerPage).get();
-            currentPage++;
-        } else if (direction === 'prev' && firstVisible) {
-            snapshot = await query.endBefore(firstVisible).limitToLast(booksPerPage).get();
-            currentPage--;
-        } else {
-            snapshot = await query.limit(booksPerPage).get();
-            currentPage = 1;
+        // ✅✅✅ CORREÇÃO: CARREGA CACHE UMA ÚNICA VEZ
+        if (!cacheCarregado) {
+            console.log("📥 Carregando TODOS os livros no cache...");
+            const snapshot = await db.collection('livros')
+                .orderBy('dataCadastro', 'desc')
+                .get();
+            
+            todosLivros = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            cacheCarregado = true;
+            totalLivros = todosLivros.length;
+            console.log(`🌍 ${todosLivros.length} livros carregados no cache (APENAS UMA VEZ)`);
+            
+            const totalElement = document.getElementById('totalLivros');
+            if (totalElement) {
+                totalElement.textContent = `${totalLivros} livros cadastrados`;
+            }
         }
         
-        if (snapshot.empty) {
-            livrosList.innerHTML = '<div class="empty-state">Nenhum livro encontrado.</div>';
-            return;
+        // ✅✅✅ CORREÇÃO: CARREGA ALUGUÉIS UMA ÚNICA VEZ
+        if (!alugueisCarregados) {
+            console.log("📋 Carregando aluguéis ativos...");
+            const alugueisSnapshot = await db.collection('alugueis')
+                .where('dataDevolucao', '==', null)
+                .get();
+            alugueis = alugueisSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            alugueisCarregados = true;
+            console.log(`📋 ${alugueis.length} aluguéis ativos carregados (APENAS UMA VEZ)`);
         }
         
-        livros = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        // ✅✅✅ CORREÇÃO: PAGINAÇÃO USANDO CACHE (SEM CONSULTA FIREBASE!)
+        const startIndex = (currentPage - 1) * booksPerPage;
+        const endIndex = startIndex + booksPerPage;
+        livros = todosLivros.slice(startIndex, endIndex);
         
-        lastVisible = snapshot.docs[snapshot.docs.length - 1];
-        firstVisible = snapshot.docs[0];
+        console.log(`📚 Página ${currentPage}: ${livros.length} livros (do cache)`);
         
         exibirLivros(livros);
         atualizarControlesPaginacao();
         
     } catch (error) {
-        console.error('❌ Erro ao mudar página:', error);
-        livrosList.innerHTML = '<div class="empty-state">Erro ao carregar página.</div>';
+        console.error('❌ Erro ao carregar livros:', error);
+        livrosList.innerHTML = '<div class="empty-state">Erro ao carregar livros. Tente novamente.</div>';
     }
+}
+
+// ✅✅✅ PAGINAÇÃO OTIMIZADA (ZERO LEITURAS FIREBASE)
+function mudarPagina(direction) {
+    if (buscaAtiva) {
+        mudarPaginaBusca(direction);
+        return;
+    }
+    
+    if (direction === 'next') {
+        currentPage++;
+    } else if (direction === 'prev') {
+        currentPage--;
+    }
+    
+    // ✅✅✅ CORREÇÃO: SEM CONSULTA AO FIREBASE!
+    const startIndex = (currentPage - 1) * booksPerPage;
+    const endIndex = startIndex + booksPerPage;
+    livros = todosLivros.slice(startIndex, endIndex);
+    
+    exibirLivros(livros);
+    atualizarControlesPaginacao();
 }
 
 function mudarPaginaBusca(direction) {
@@ -332,6 +258,7 @@ function filtrarLivros() {
 }
 
 function aplicarFiltroBusca() {
+    // ✅✅✅ CORREÇÃO: BUSCA NO CACHE (ZERO LEITURAS FIREBASE)
     const livrosFiltrados = filtrarLivrosGlobal();
     const startIndex = (currentPage - 1) * booksPerPage;
     const endIndex = startIndex + booksPerPage;
@@ -488,7 +415,6 @@ async function cadastrarLivro(e) {
     
     console.log("📝 Dados do livro:", livroData);
     
-    // Validação
     if (Object.values(livroData).some(valor => 
         valor === '' || 
         (typeof valor === 'string' && !valor.trim()) || 
@@ -503,11 +429,8 @@ async function cadastrarLivro(e) {
         await db.collection('livros').add(livroData);
         console.log("✅ Livro cadastrado com sucesso!");
         
-        // Limpa cache para forçar atualização
-        cacheCarregado = false;
-        totalLivros = 0;
-        
-        await carregarTodosLivros();
+        // ✅✅✅ CORREÇÃO: INVALIDA CACHE PARA ATUALIZAR
+        invalidarCache();
         
         document.getElementById('formCadastro').reset();
         
@@ -533,6 +456,14 @@ async function cadastrarLivro(e) {
     }
 }
 
+// ✅✅✅ FUNÇÃO AUXILIAR PARA INVALIDAR CACHE
+function invalidarCache() {
+    cacheCarregado = false;
+    alugueisCarregados = false;
+    totalLivros = 0;
+    console.log("🔄 Cache invalidado - próxima operação recarregará dados");
+}
+
 async function carregarLivrosDisponiveis() {
     const grid = document.getElementById('livrosDisponiveisGrid');
     if (!grid) return;
@@ -540,28 +471,18 @@ async function carregarLivrosDisponiveis() {
     grid.innerHTML = '<div class="loading">Carregando livros disponíveis...</div>';
     
     try {
-        // Usa cache quando possível
-        let livrosParaProcessar = [];
-        
-        if (cacheCarregado) {
-            livrosParaProcessar = todosLivros;
-            console.log("♻️ Usando cache para livros disponíveis");
-        } else {
-            const livrosSnapshot = await db.collection('livros').get();
-            livrosParaProcessar = livrosSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+        // ✅✅✅ CORREÇÃO: USA CACHE EXISTENTE
+        if (!cacheCarregado) {
+            await carregarLivros();
         }
         
-        // Carrega aluguéis ativos se necessário
         if (!alugueisCarregados) {
             await carregarAlugueisAtivos();
         }
         
         livrosDisponiveis = [];
         
-        for (const livro of livrosParaProcessar) {
+        for (const livro of todosLivros) {
             const alugueisDoLivro = alugueis.filter(a => a.livroId === livro.id);
             const quantidadeAlugada = alugueisDoLivro.reduce((total, aluguel) => total + aluguel.quantidade, 0);
             const quantidadeDisponivel = livro.quantidade - quantidadeAlugada;
@@ -576,7 +497,7 @@ async function carregarLivrosDisponiveis() {
         }
         
         exibirLivrosDisponiveis(livrosDisponiveis);
-        console.log(`💰 ${livrosDisponiveis.length} livros disponíveis carregados`);
+        console.log(`💰 ${livrosDisponiveis.length} livros disponíveis (do cache)`);
         
     } catch (error) {
         console.error('❌ Erro ao carregar livros disponíveis:', error);
@@ -591,7 +512,6 @@ async function carregarLivrosAlugados() {
     grid.innerHTML = '<div class="loading">Carregando livros alugados...</div>';
     
     try {
-        // Carrega aluguéis ativos se necessário
         if (!alugueisCarregados) {
             await carregarAlugueisAtivos();
         }
@@ -599,15 +519,8 @@ async function carregarLivrosAlugados() {
         livrosAlugados = [];
         
         for (const aluguel of alugueis) {
-            // Tenta usar cache primeiro
+            // ✅✅✅ CORREÇÃO: USA CACHE EM VEZ DE CONSULTAR CADA LIVRO
             let livro = todosLivros.find(l => l.id === aluguel.livroId);
-            
-            if (!livro) {
-                const livroDoc = await db.collection('livros').doc(aluguel.livroId).get();
-                if (livroDoc.exists) {
-                    livro = { id: livroDoc.id, ...livroDoc.data() };
-                }
-            }
             
             if (livro) {
                 livrosAlugados.push({
@@ -623,12 +536,26 @@ async function carregarLivrosAlugados() {
         }
         
         exibirLivrosAlugados(livrosAlugados);
-        console.log(`🔄 ${livrosAlugados.length} livros alugados carregados`);
+        console.log(`🔄 ${livrosAlugados.length} livros alugados carregados (do cache)`);
         
     } catch (error) {
         console.error('❌ Erro ao carregar livros alugados:', error);
         grid.innerHTML = '<div class="empty-state">Erro ao carregar livros alugados.</div>';
     }
+}
+
+// ✅✅✅ FUNÇÃO AUXILIAR PARA CARREGAR ALUGUÉIS
+async function carregarAlugueisAtivos() {
+    if (alugueisCarregados) return;
+    
+    const alugueisSnapshot = await db.collection('alugueis')
+        .where('dataDevolucao', '==', null)
+        .get();
+    alugueis = alugueisSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+    alugueisCarregados = true;
 }
 
 function exibirLivrosDisponiveis(livros) {
@@ -787,21 +714,19 @@ async function alugarLivro() {
             quantidade: quantidade,
             dataAluguel: new Date(),
             dataDevolucao: null,
-            prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 dias
+            prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         };
         
         await db.collection('alugueis').add(aluguelData);
         
-        // Limpa formulário
         document.getElementById('clienteNome').value = '';
         document.getElementById('buscaLivroAlugar').value = '';
         document.getElementById('livroSelecionadoCard').style.display = 'none';
         document.getElementById('btnAlugar').disabled = true;
         livroSelecionadoAlugar = null;
         
-        // Atualiza dados
-        alugueisCarregados = false;
-        cacheCarregado = false;
+        // ✅✅✅ CORREÇÃO: INVALIDA CACHE
+        invalidarCache();
         
         await carregarLivrosDisponiveis();
         await carregarLivrosAlugados();
@@ -830,12 +755,10 @@ async function devolverLivro() {
     
     try {
         if (quantidade === livroSelecionadoDevolver.quantidade) {
-            // Devolve todos os livros
             await db.collection('alugueis').doc(livroSelecionadoDevolver.id).update({
                 dataDevolucao: new Date()
             });
         } else {
-            // Devolve parcialmente
             const aluguelDoc = await db.collection('alugueis').doc(livroSelecionadoDevolver.id).get();
             const aluguel = aluguelDoc.data();
             
@@ -844,15 +767,13 @@ async function devolverLivro() {
             });
         }
         
-        // Limpa formulário
         document.getElementById('buscaLivroDevolver').value = '';
         document.getElementById('livroDevolucaoSelecionadoCard').style.display = 'none';
         document.getElementById('btnDevolver').disabled = true;
         livroSelecionadoDevolver = null;
         
-        // Atualiza dados
-        alugueisCarregados = false;
-        cacheCarregado = false;
+        // ✅✅✅ CORREÇÃO: INVALIDA CACHE
+        invalidarCache();
         
         await carregarLivrosDisponiveis();
         await carregarLivrosAlugados();
@@ -900,11 +821,9 @@ async function salvarEdicao() {
             bandeja: document.getElementById('editBandeja').value.trim()
         });
         
-        // Limpa cache para forçar atualização
-        cacheCarregado = false;
-        totalLivros = 0;
+        // ✅✅✅ CORREÇÃO: INVALIDA CACHE
+        invalidarCache();
         
-        await carregarTodosLivros();
         await carregarLivros();
         
         fecharModal();
@@ -922,11 +841,9 @@ async function excluirLivro(livroId) {
         try {
             await db.collection('livros').doc(livroId).delete();
             
-            // Limpa cache para forçar atualização
-            cacheCarregado = false;
-            totalLivros = 0;
+            // ✅✅✅ CORREÇÃO: INVALIDA CACHE
+            invalidarCache();
             
-            await carregarTodosLivros();
             await carregarLivros();
             
             alert('Livro excluído com sucesso!');
