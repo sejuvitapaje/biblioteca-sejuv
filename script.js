@@ -176,8 +176,6 @@ function inicializarBuscaDevolucao() {
         });
     }
 }
-
-// ✅ FUNÇÃO PRINCIPAL COMPLETAMENTE OTIMIZADA
 async function carregarLivros() {
     const livrosList = document.getElementById('livrosList');
     if (!livrosList) return;
@@ -192,13 +190,15 @@ async function carregarLivros() {
     try {
         console.log("🔄 Buscando livros...");
         
+        // ✅ CORREÇÃO: Contagem simplificada sem .count()
         if (totalLivros === 0) {
-            const countSnapshot = await db.collection('livros').count().get();
-            totalLivros = countSnapshot.data().count;
+            const snapshot = await db.collection('livros').get();
+            totalLivros = snapshot.size;
             console.log(`📊 Total de livros: ${totalLivros}`);
             document.getElementById('totalLivros').textContent = `${totalLivros} livros cadastrados`;
         }
         
+        // ✅ Busca apenas a página necessária
         const snapshot = await db.collection('livros')
             .orderBy('dataCadastro', 'desc')
             .limit(booksPerPage)
@@ -214,6 +214,7 @@ async function carregarLivros() {
         lastVisible = snapshot.docs[snapshot.docs.length - 1];
         firstVisible = snapshot.docs[0];
         
+        // ✅ CORREÇÃO: Carrega aluguéis apenas UMA VEZ
         if (!alugueisCarregados) {
             const alugueisSnapshot = await db.collection('alugueis')
                 .where('dataDevolucao', '==', null)
