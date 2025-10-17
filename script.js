@@ -18,183 +18,120 @@ try {
 
 const db = firebase.firestore();
 
-// Variáveis globais
-let livros = [];
-let todosLivros = [];
-let alugueis = [];
-let livroEditando = null;
+// ⚡ CACHE GLOBAL - EVITA LEITURAS REPETIDAS
+let cache = {
+    todosLivros: [],
+    alugueisAtivos: [],
+    carregado: false,
+    alugueisCarregados: false
+};
 
-// Variáveis de paginação
+// Variáveis de estado
 let currentPage = 1;
 const booksPerPage = 20;
-let totalLivros = 0;
 let buscaAtiva = false;
 let termoBusca = '';
+let livrosPaginaAtual = [];
 
 // Variáveis para aluguel
 let livroSelecionadoAlugar = null;
 let livroSelecionadoDevolver = null;
-let livrosDisponiveis = [];
-let livrosAlugados = [];
-
-// ✅ CACHE OTIMIZADO
-let cacheCarregado = false;
-let alugueisCarregados = false;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("📚 Biblioteca carregada!");
+    console.log("📚 Sistema carregado - Cache vazio");
     
+    // Configurações básicas
     const formCadastro = document.getElementById('formCadastro');
-    if (formCadastro) {
-        formCadastro.addEventListener('submit', cadastrarLivro);
-    }
+    if (formCadastro) formCadastro.addEventListener('submit', cadastrarLivro);
     
     if (document.getElementById('livrosList')) {
         console.log("📖 Página da biblioteca detectada");
         inicializarPaginacao();
-        carregarLivros();
+        carregarLivros(); // ⚡ APENAS 1 LEITURA AQUI
     }
     
     if (document.getElementById('buscaLivroAlugar')) {
         console.log("💰 Página de aluguel detectada");
         inicializarBuscaAluguel();
-        carregarLivrosDisponiveis();
+        carregarLivrosDisponiveis(); // ⚡ USA CACHE
     }
     
     if (document.getElementById('buscaLivroDevolver')) {
         console.log("🔄 Página de devolução detectada");
         inicializarBuscaDevolucao();
-        carregarLivrosAlugados();
+        carregarLivrosAlugados(); // ⚡ USA CACHE
     }
     
+    // Modal
     const modal = document.getElementById('editModal');
     if (modal) {
-        const closeBtn = modal.querySelector('.close');
-        closeBtn.addEventListener('click', fecharModal);
-        
-        window.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                fecharModal();
-            }
-        });
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') fecharModal();
-        });
+        modal.querySelector('.close').addEventListener('click', fecharModal);
+        window.addEventListener('click', (e) => e.target === modal && fecharModal());
+        document.addEventListener('keydown', (e) => e.key === 'Escape' && fecharModal());
     }
 });
 
-function inicializarPaginacao() {
-    const prevBtn = document.getElementById('prevPage');
-    const nextBtn = document.getElementById('nextPage');
-    const prevBtnBottom = document.getElementById('prevPageBottom');
-    const nextBtnBottom = document.getElementById('nextPageBottom');
-    const searchInput = document.getElementById('searchInput');
-
-    if (prevBtn) {
-        prevBtn.addEventListener('click', () => mudarPagina('prev'));
-        nextBtn.addEventListener('click', () => mudarPagina('next'));
-        if (prevBtnBottom) prevBtnBottom.addEventListener('click', () => mudarPagina('prev'));
-        if (nextBtnBottom) nextBtnBottom.addEventListener('click', () => mudarPagina('next'));
-    }
-
-    if (searchInput) {
-        let timeout;
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                termoBusca = e.target.value.toLowerCase();
-                filtrarLivros();
-            }, 300);
-        });
-    }
-}
-
-function inicializarBuscaAluguel() {
-    const buscaInput = document.getElementById('buscaLivroAlugar');
-    if (buscaInput) {
-        let timeout;
-        buscaInput.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                filtrarLivrosDisponiveis();
-            }, 300);
-        });
-    }
-}
-
-function inicializarBuscaDevolucao() {
-    const buscaInput = document.getElementById('buscaLivroDevolver');
-    if (buscaInput) {
-        let timeout;
-        buscaInput.addEventListener('input', (e) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                filtrarLivrosAlugados();
-            }, 300);
-        });
-    }
-}
-
-// ✅✅✅ FUNÇÃO PRINCIPAL CORRIGIDA - MÍNIMO DE LEITURAS
+// ⚡ FUNÇÃO PRINCIPAL - MÁXIMO 2 LEITURAS POR SESSÃO
 async function carregarLivros() {
     const livrosList = document.getElementById('livrosList');
     if (!livrosList) return;
     
-    if (buscaAtiva) {
-        aplicarFiltroBusca();
-        return;
-    }
-    
     livrosList.innerHTML = '<div class="loading">Carregando livros...</div>';
     
     try {
-        console.log("🔄 Buscando livros no Firebase...");
+        console.log("🔄 Iniciando carregamento...");
         
-        // ✅✅✅ CORREÇÃO: CARREGA CACHE UMA ÚNICA VEZ
-        if (!cacheCarregado) {
-            console.log("📥 Carregando TODOS os livros no cache...");
-            const snapshot = await db.collection('livros')
+        // ⚡ LEITURA 1: TODOS OS LIVROS (APENAS UMA VEZ)
+        if (!cache.carregado) {
+            console.log("📥 FAZENDO LEITURA DOS LIVROS...");
+            const livrosSnapshot = await db.collection('livros')
                 .orderBy('dataCadastro', 'desc')
                 .get();
             
-            todosLivros = snapshot.docs.map(doc => ({
+            cache.todosLivros = livrosSnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
-            cacheCarregado = true;
-            totalLivros = todosLivros.length;
-            console.log(`🌍 ${todosLivros.length} livros carregados no cache (APENAS UMA VEZ)`);
+            cache.carregado = true;
+            console.log(`✅ ${cache.todosLivros.length} livros carregados (1 LEITURA)`);
             
+            // Atualiza interface
             const totalElement = document.getElementById('totalLivros');
             if (totalElement) {
-                totalElement.textContent = `${totalLivros} livros cadastrados`;
+                totalElement.textContent = `${cache.todosLivros.length} livros cadastrados`;
             }
+        } else {
+            console.log("♻️ Usando cache de livros (0 LEITURAS)");
         }
         
-        // ✅✅✅ CORREÇÃO: CARREGA ALUGUÉIS UMA ÚNICA VEZ
-        if (!alugueisCarregados) {
-            console.log("📋 Carregando aluguéis ativos...");
+        // ⚡ LEITURA 2: ALUGUÉIS ATIVOS (APENAS UMA VEZ)
+        if (!cache.alugueisCarregados) {
+            console.log("📋 FAZENDO LEITURA DOS ALUGUÉIS...");
             const alugueisSnapshot = await db.collection('alugueis')
                 .where('dataDevolucao', '==', null)
                 .get();
-            alugueis = alugueisSnapshot.docs.map(doc => ({
+            
+            cache.alugueisAtivos = alugueisSnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
-            alugueisCarregados = true;
-            console.log(`📋 ${alugueis.length} aluguéis ativos carregados (APENAS UMA VEZ)`);
+            cache.alugueisCarregados = true;
+            console.log(`✅ ${cache.alugueisAtivos.length} aluguéis carregados (1 LEITURA)`);
+        } else {
+            console.log("♻️ Usando cache de aluguéis (0 LEITURAS)");
         }
         
-        // ✅✅✅ CORREÇÃO: PAGINAÇÃO USANDO CACHE (SEM CONSULTA FIREBASE!)
+        // ⚡ PAGINAÇÃO NO CACHE (0 LEITURAS)
         const startIndex = (currentPage - 1) * booksPerPage;
         const endIndex = startIndex + booksPerPage;
-        livros = todosLivros.slice(startIndex, endIndex);
+        livrosPaginaAtual = cache.todosLivros.slice(startIndex, endIndex);
         
-        console.log(`📚 Página ${currentPage}: ${livros.length} livros (do cache)`);
+        console.log(`📚 Página ${currentPage}: ${livrosPaginaAtual.length} livros (0 LEITURAS)`);
         
-        exibirLivros(livros);
+        exibirLivros(livrosPaginaAtual);
         atualizarControlesPaginacao();
+        
+        console.log("🎯 TOTAL DE LEITURAS DESTA SESSÃO: " + (cache.carregado && cache.alugueisCarregados ? "2" : "1-2"));
         
     } catch (error) {
         console.error('❌ Erro ao carregar livros:', error);
@@ -202,25 +139,22 @@ async function carregarLivros() {
     }
 }
 
-// ✅✅✅ PAGINAÇÃO OTIMIZADA (ZERO LEITURAS FIREBASE)
+// ⚡ PAGINAÇÃO ZERO LEITURAS
 function mudarPagina(direction) {
     if (buscaAtiva) {
         mudarPaginaBusca(direction);
         return;
     }
     
-    if (direction === 'next') {
-        currentPage++;
-    } else if (direction === 'prev') {
-        currentPage--;
-    }
+    direction === 'next' ? currentPage++ : currentPage--;
     
-    // ✅✅✅ CORREÇÃO: SEM CONSULTA AO FIREBASE!
+    // ⚡ SEM CONSULTA AO FIREBASE!
     const startIndex = (currentPage - 1) * booksPerPage;
     const endIndex = startIndex + booksPerPage;
-    livros = todosLivros.slice(startIndex, endIndex);
+    livrosPaginaAtual = cache.todosLivros.slice(startIndex, endIndex);
     
-    exibirLivros(livros);
+    console.log(`📄 Mudando para página ${currentPage} (0 LEITURAS)`);
+    exibirLivros(livrosPaginaAtual);
     atualizarControlesPaginacao();
 }
 
@@ -228,12 +162,7 @@ function mudarPaginaBusca(direction) {
     const livrosFiltrados = filtrarLivrosGlobal();
     const totalPages = Math.ceil(livrosFiltrados.length / booksPerPage);
     
-    if (direction === 'next') {
-        currentPage++;
-    } else if (direction === 'prev') {
-        currentPage--;
-    }
-    
+    direction === 'next' ? currentPage++ : currentPage--;
     currentPage = Math.max(1, Math.min(currentPage, totalPages));
     
     const startIndex = (currentPage - 1) * booksPerPage;
@@ -244,6 +173,7 @@ function mudarPaginaBusca(direction) {
     atualizarControlesPaginacaoBusca(livrosFiltrados.length);
 }
 
+// ⚡ BUSCA ZERO LEITURAS
 function filtrarLivros() {
     if (!termoBusca || termoBusca.trim() === '') {
         buscaAtiva = false;
@@ -254,81 +184,290 @@ function filtrarLivros() {
     
     buscaAtiva = true;
     currentPage = 1;
-    aplicarFiltroBusca();
-}
-
-function aplicarFiltroBusca() {
-    // ✅✅✅ CORREÇÃO: BUSCA NO CACHE (ZERO LEITURAS FIREBASE)
+    
+    // ⚡ BUSCA NO CACHE - ZERO LEITURAS
     const livrosFiltrados = filtrarLivrosGlobal();
     const startIndex = (currentPage - 1) * booksPerPage;
     const endIndex = startIndex + booksPerPage;
     const livrosPagina = livrosFiltrados.slice(startIndex, endIndex);
     
+    console.log(`🔍 Busca: "${termoBusca}" - ${livrosFiltrados.length} resultados (0 LEITURAS)`);
     exibirLivros(livrosPagina);
     atualizarControlesPaginacaoBusca(livrosFiltrados.length);
 }
 
 function filtrarLivrosGlobal() {
-    if (!termoBusca) return todosLivros;
+    if (!termoBusca) return cache.todosLivros;
     
-    return todosLivros.filter(livro => 
+    return cache.todosLivros.filter(livro => 
         livro.livro.toLowerCase().includes(termoBusca) || 
         livro.autor.toLowerCase().includes(termoBusca)
     );
 }
 
-function atualizarControlesPaginacao() {
-    const totalPages = Math.ceil(totalLivros / booksPerPage);
-    const pageInfo = `Página ${currentPage} de ${totalPages}`;
-    const resultsInfo = `${livros.length} livros nesta página`;
+// ⚡ LIVROS DISPONÍVEIS - ZERO LEITURAS (USA CACHE)
+async function carregarLivrosDisponiveis() {
+    const grid = document.getElementById('livrosDisponiveisGrid');
+    if (!grid) return;
     
-    const pageInfoElement = document.getElementById('pageInfo');
-    const pageInfoBottom = document.getElementById('pageInfoBottom');
-    const resultsInfoElement = document.getElementById('resultsInfo');
+    grid.innerHTML = '<div class="loading">Carregando livros disponíveis...</div>';
     
-    if (pageInfoElement) pageInfoElement.textContent = pageInfo;
-    if (pageInfoBottom) pageInfoBottom.textContent = pageInfo;
-    if (resultsInfoElement) resultsInfoElement.textContent = resultsInfo;
-    
-    const prevBtn = document.getElementById('prevPage');
-    const nextBtn = document.getElementById('nextPage');
-    const prevBtnBottom = document.getElementById('prevPageBottom');
-    const nextBtnBottom = document.getElementById('nextPageBottom');
-    
-    if (prevBtn) {
-        prevBtn.disabled = currentPage === 1;
-        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
-        if (prevBtnBottom) prevBtnBottom.disabled = currentPage === 1;
-        if (nextBtnBottom) nextBtnBottom.disabled = currentPage === totalPages || totalPages === 0;
+    try {
+        // Garante que cache está carregado
+        if (!cache.carregado || !cache.alugueisCarregados) {
+            await carregarLivros();
+        }
+        
+        const livrosDisponiveis = cache.todosLivros.map(livro => {
+            const alugueisDoLivro = cache.alugueisAtivos.filter(a => a.livroId === livro.id);
+            const quantidadeAlugada = alugueisDoLivro.reduce((total, aluguel) => total + aluguel.quantidade, 0);
+            const quantidadeDisponivel = livro.quantidade - quantidadeAlugada;
+            
+            return {
+                ...livro,
+                quantidadeDisponivel,
+                quantidadeAlugada
+            };
+        }).filter(livro => livro.quantidadeDisponivel > 0);
+        
+        // Salva para uso nos filtros
+        window.livrosDisponiveisFiltrados = livrosDisponiveis;
+        
+        console.log(`💰 ${livrosDisponiveis.length} livros disponíveis (0 LEITURAS)`);
+        exibirLivrosDisponiveis(livrosDisponiveis);
+        
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        grid.innerHTML = '<div class="empty-state">Erro ao carregar livros disponíveis.</div>';
     }
 }
 
-function atualizarControlesPaginacaoBusca(totalEncontrados) {
-    const totalPages = Math.ceil(totalEncontrados / booksPerPage);
-    const pageInfo = `Página ${currentPage} de ${totalPages}`;
-    const resultsInfo = `${totalEncontrados} livros encontrados`;
+// ⚡ LIVROS ALUGADOS - ZERO LEITURAS (USA CACHE)
+async function carregarLivrosAlugados() {
+    const grid = document.getElementById('livrosAlugadosGrid');
+    if (!grid) return;
     
-    const pageInfoElement = document.getElementById('pageInfo');
-    const pageInfoBottom = document.getElementById('pageInfoBottom');
-    const resultsInfoElement = document.getElementById('resultsInfo');
+    grid.innerHTML = '<div class="loading">Carregando livros alugados...</div>';
     
-    if (pageInfoElement) pageInfoElement.textContent = pageInfo;
-    if (pageInfoBottom) pageInfoBottom.textContent = pageInfo;
-    if (resultsInfoElement) resultsInfoElement.textContent = resultsInfo;
-    
-    const prevBtn = document.getElementById('prevPage');
-    const nextBtn = document.getElementById('nextPage');
-    const prevBtnBottom = document.getElementById('prevPageBottom');
-    const nextBtnBottom = document.getElementById('nextPageBottom');
-    
-    if (prevBtn) {
-        prevBtn.disabled = currentPage === 1;
-        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
-        if (prevBtnBottom) prevBtnBottom.disabled = currentPage === 1;
-        if (nextBtnBottom) nextBtnBottom.disabled = currentPage === totalPages || totalPages === 0;
+    try {
+        if (!cache.alugueisCarregados) {
+            await carregarLivros();
+        }
+        
+        const livrosAlugados = cache.alugueisAtivos.map(aluguel => {
+            const livro = cache.todosLivros.find(l => l.id === aluguel.livroId);
+            return livro ? {
+                id: aluguel.id,
+                livroId: aluguel.livroId,
+                livro: livro.livro,
+                autor: livro.autor,
+                clienteNome: aluguel.clienteNome,
+                quantidade: aluguel.quantidade,
+                dataAluguel: aluguel.dataAluguel
+            } : null;
+        }).filter(Boolean);
+        
+        // Salva para uso nos filtros
+        window.livrosAlugadosFiltrados = livrosAlugados;
+        
+        console.log(`🔄 ${livrosAlugados.length} livros alugados (0 LEITURAS)`);
+        exibirLivrosAlugados(livrosAlugados);
+        
+    } catch (error) {
+        console.error('❌ Erro:', error);
+        grid.innerHTML = '<div class="empty-state">Erro ao carregar livros alugados.</div>';
     }
 }
 
+// ⚡ QUANDO DADOS MUDAM - INVALIDA CACHE
+function invalidarCache() {
+    cache.carregado = false;
+    cache.alugueisCarregados = false;
+    cache.todosLivros = [];
+    cache.alugueisAtivos = [];
+    console.log("🔄 CACHE INVALIDADO - Próxima ação fará 1-2 leituras");
+}
+
+// ⚡ CADASTRAR LIVRO - 1 ESCRITA + INVALIDA CACHE
+async function cadastrarLivro(e) {
+    e.preventDefault();
+    
+    const livroData = {
+        livro: document.getElementById('livro').value.trim(),
+        autor: document.getElementById('autor').value.trim(),
+        categoria: document.getElementById('categoria').value.trim(),
+        quantidade: parseInt(document.getElementById('quantidade').value),
+        prateleira: document.getElementById('prateleira').value.trim(),
+        bandeja: document.getElementById('bandeja').value.trim(),
+        dataCadastro: new Date()
+    };
+    
+    // Validação
+    if (Object.values(livroData).some(valor => 
+        valor === '' || (typeof valor === 'string' && !valor.trim()) || (typeof valor === 'number' && isNaN(valor))
+    )) {
+        alert("Por favor, preencha todos os campos corretamente!");
+        return;
+    }
+    
+    try {
+        await db.collection('livros').add(livroData);
+        invalidarCache(); // ⚡ FORÇA RECARREGAMENTO NA PRÓXIMA VEZ
+        document.getElementById('formCadastro').reset();
+        
+        // Feedback visual
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        if (successMessage) {
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            setTimeout(() => successMessage.style.display = 'none', 3000);
+        }
+        
+        console.log("✅ Livro cadastrado + Cache invalidado");
+        
+    } catch (error) {
+        console.error('❌ Erro ao cadastrar:', error);
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        if (successMessage) successMessage.style.display = 'none';
+        if (errorMessage) errorMessage.style.display = 'block';
+        setTimeout(() => errorMessage.style.display = 'none', 3000);
+    }
+}
+
+// ⚡ EDITAR LIVRO - 1 ESCRITA + INVALIDA CACHE
+async function salvarEdicao() {
+    if (!window.livroEditando) return;
+    
+    try {
+        await db.collection('livros').doc(window.livroEditando.id).update({
+            livro: document.getElementById('editLivro').value.trim(),
+            autor: document.getElementById('editAutor').value.trim(),
+            categoria: document.getElementById('editCategoria').value.trim(),
+            quantidade: parseInt(document.getElementById('editQuantidade').value),
+            prateleira: document.getElementById('editPrateleira').value.trim(),
+            bandeja: document.getElementById('editBandeja').value.trim()
+        });
+        
+        invalidarCache();
+        await carregarLivros();
+        fecharModal();
+        alert('Livro atualizado com sucesso!');
+        console.log("✅ Livro editado + Cache invalidado");
+        
+    } catch (error) {
+        console.error('❌ Erro ao editar:', error);
+        alert('Erro ao atualizar livro. Tente novamente.');
+    }
+}
+
+// ⚡ EXCLUIR LIVRO - 1 ESCRITA + INVALIDA CACHE
+async function excluirLivro(livroId) {
+    if (confirm('Tem certeza que deseja excluir este livro?')) {
+        try {
+            await db.collection('livros').doc(livroId).delete();
+            invalidarCache();
+            await carregarLivros();
+            alert('Livro excluído com sucesso!');
+            console.log("✅ Livro excluído + Cache invalidado");
+        } catch (error) {
+            console.error('❌ Erro ao excluir:', error);
+            alert('Erro ao excluir livro. Tente novamente.');
+        }
+    }
+}
+
+// ⚡ ALUGAR LIVRO - 1 ESCRITA + INVALIDA CACHE
+async function alugarLivro() {
+    const clienteNome = document.getElementById('clienteNome').value.trim();
+    const quantidade = parseInt(document.getElementById('quantidadeAlugar').value);
+    
+    if (!window.livroSelecionadoAlugar || !clienteNome || !quantidade) {
+        alert("Por favor, preencha todos os campos e selecione um livro!");
+        return;
+    }
+    
+    if (quantidade > window.livroSelecionadoAlugar.quantidadeDisponivel) {
+        alert(`Quantidade indisponível! Apenas ${window.livroSelecionadoAlugar.quantidadeDisponivel} livros disponíveis.`);
+        return;
+    }
+    
+    try {
+        await db.collection('alugueis').add({
+            livroId: window.livroSelecionadoAlugar.id,
+            clienteNome: clienteNome,
+            quantidade: quantidade,
+            dataAluguel: new Date(),
+            dataDevolucao: null,
+            prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        });
+        
+        invalidarCache();
+        document.getElementById('clienteNome').value = '';
+        document.getElementById('buscaLivroAlugar').value = '';
+        document.getElementById('livroSelecionadoCard').style.display = 'none';
+        document.getElementById('btnAlugar').disabled = true;
+        window.livroSelecionadoAlugar = null;
+        
+        await carregarLivrosDisponiveis();
+        await carregarLivrosAlugados();
+        
+        alert('Livro alugado com sucesso!');
+        console.log("✅ Livro alugado + Cache invalidado");
+        
+    } catch (error) {
+        console.error('❌ Erro ao alugar:', error);
+        alert('Erro ao alugar livro. Tente novamente.');
+    }
+}
+
+// ⚡ DEVOLVER LIVRO - 1 ESCRITA + INVALIDA CACHE
+async function devolverLivro() {
+    const quantidade = parseInt(document.getElementById('quantidadeDevolver').value);
+    
+    if (!window.livroSelecionadoDevolver || !quantidade) {
+        alert("Por favor, selecione um livro para devolver!");
+        return;
+    }
+    
+    if (quantidade > window.livroSelecionadoDevolver.quantidade) {
+        alert(`Quantidade inválida! Apenas ${window.livroSelecionadoDevolver.quantidade} livros foram alugados.`);
+        return;
+    }
+    
+    try {
+        if (quantidade === window.livroSelecionadoDevolver.quantidade) {
+            await db.collection('alugueis').doc(window.livroSelecionadoDevolver.id).update({
+                dataDevolucao: new Date()
+            });
+        } else {
+            const aluguelDoc = await db.collection('alugueis').doc(window.livroSelecionadoDevolver.id).get();
+            const aluguel = aluguelDoc.data();
+            await db.collection('alugueis').doc(window.livroSelecionadoDevolver.id).update({
+                quantidade: aluguel.quantidade - quantidade
+            });
+        }
+        
+        invalidarCache();
+        document.getElementById('buscaLivroDevolver').value = '';
+        document.getElementById('livroDevolucaoSelecionadoCard').style.display = 'none';
+        document.getElementById('btnDevolver').disabled = true;
+        window.livroSelecionadoDevolver = null;
+        
+        await carregarLivrosDisponiveis();
+        await carregarLivrosAlugados();
+        
+        alert('Livro devolvido com sucesso!');
+        console.log("✅ Livro devolvido + Cache invalidado");
+        
+    } catch (error) {
+        console.error('❌ Erro ao devolver:', error);
+        alert('Erro ao devolver livro. Tente novamente.');
+    }
+}
+
+// FUNÇÕES DE INTERFACE
 function exibirLivros(livrosParaExibir) {
     const livrosList = document.getElementById('livrosList');
     if (!livrosList) return;
@@ -344,7 +483,7 @@ function exibirLivros(livrosParaExibir) {
     }
     
     livrosList.innerHTML = livrosParaExibir.map(livro => {
-        const alugueisDoLivro = alugueis.filter(a => a.livroId === livro.id);
+        const alugueisDoLivro = cache.alugueisAtivos.filter(a => a.livroId === livro.id);
         const quantidadeAlugada = alugueisDoLivro.reduce((total, aluguel) => total + aluguel.quantidade, 0);
         const quantidadeDisponivel = livro.quantidade - quantidadeAlugada;
         const disponivel = quantidadeDisponivel > 0;
@@ -395,167 +534,6 @@ function exibirLivros(livrosParaExibir) {
         </div>
         `;
     }).join('');
-}
-
-async function cadastrarLivro(e) {
-    e.preventDefault();
-    
-    console.log("🎯 Botão de cadastro clicado!");
-    
-    const livroData = {
-        livro: document.getElementById('livro').value.trim(),
-        autor: document.getElementById('autor').value.trim(),
-        categoria: document.getElementById('categoria').value.trim(),
-        quantidade: parseInt(document.getElementById('quantidade').value),
-        prateleira: document.getElementById('prateleira').value.trim(),
-        bandeja: document.getElementById('bandeja').value.trim(),
-        disponivel: true,
-        dataCadastro: new Date()
-    };
-    
-    console.log("📝 Dados do livro:", livroData);
-    
-    if (Object.values(livroData).some(valor => 
-        valor === '' || 
-        (typeof valor === 'string' && !valor.trim()) || 
-        (typeof valor === 'number' && isNaN(valor))
-    )) {
-        alert("Por favor, preencha todos os campos corretamente!");
-        return;
-    }
-    
-    try {
-        console.log("📦 Salvando no Firebase...");
-        await db.collection('livros').add(livroData);
-        console.log("✅ Livro cadastrado com sucesso!");
-        
-        // ✅✅✅ CORREÇÃO: INVALIDA CACHE PARA ATUALIZAR
-        invalidarCache();
-        
-        document.getElementById('formCadastro').reset();
-        
-        const successMessage = document.getElementById('successMessage');
-        const errorMessage = document.getElementById('errorMessage');
-        if (successMessage) successMessage.style.display = 'block';
-        if (errorMessage) errorMessage.style.display = 'none';
-        
-        setTimeout(() => {
-            if (successMessage) successMessage.style.display = 'none';
-        }, 3000);
-        
-    } catch (error) {
-        console.error('❌ Erro ao cadastrar livro:', error);
-        const successMessage = document.getElementById('successMessage');
-        const errorMessage = document.getElementById('errorMessage');
-        if (successMessage) successMessage.style.display = 'none';
-        if (errorMessage) errorMessage.style.display = 'block';
-        
-        setTimeout(() => {
-            if (errorMessage) errorMessage.style.display = 'none';
-        }, 3000);
-    }
-}
-
-// ✅✅✅ FUNÇÃO AUXILIAR PARA INVALIDAR CACHE
-function invalidarCache() {
-    cacheCarregado = false;
-    alugueisCarregados = false;
-    totalLivros = 0;
-    console.log("🔄 Cache invalidado - próxima operação recarregará dados");
-}
-
-async function carregarLivrosDisponiveis() {
-    const grid = document.getElementById('livrosDisponiveisGrid');
-    if (!grid) return;
-    
-    grid.innerHTML = '<div class="loading">Carregando livros disponíveis...</div>';
-    
-    try {
-        // ✅✅✅ CORREÇÃO: USA CACHE EXISTENTE
-        if (!cacheCarregado) {
-            await carregarLivros();
-        }
-        
-        if (!alugueisCarregados) {
-            await carregarAlugueisAtivos();
-        }
-        
-        livrosDisponiveis = [];
-        
-        for (const livro of todosLivros) {
-            const alugueisDoLivro = alugueis.filter(a => a.livroId === livro.id);
-            const quantidadeAlugada = alugueisDoLivro.reduce((total, aluguel) => total + aluguel.quantidade, 0);
-            const quantidadeDisponivel = livro.quantidade - quantidadeAlugada;
-            
-            if (quantidadeDisponivel > 0) {
-                livrosDisponiveis.push({
-                    ...livro,
-                    quantidadeDisponivel: quantidadeDisponivel,
-                    quantidadeAlugada: quantidadeAlugada
-                });
-            }
-        }
-        
-        exibirLivrosDisponiveis(livrosDisponiveis);
-        console.log(`💰 ${livrosDisponiveis.length} livros disponíveis (do cache)`);
-        
-    } catch (error) {
-        console.error('❌ Erro ao carregar livros disponíveis:', error);
-        grid.innerHTML = '<div class="empty-state">Erro ao carregar livros disponíveis.</div>';
-    }
-}
-
-async function carregarLivrosAlugados() {
-    const grid = document.getElementById('livrosAlugadosGrid');
-    if (!grid) return;
-    
-    grid.innerHTML = '<div class="loading">Carregando livros alugados...</div>';
-    
-    try {
-        if (!alugueisCarregados) {
-            await carregarAlugueisAtivos();
-        }
-        
-        livrosAlugados = [];
-        
-        for (const aluguel of alugueis) {
-            // ✅✅✅ CORREÇÃO: USA CACHE EM VEZ DE CONSULTAR CADA LIVRO
-            let livro = todosLivros.find(l => l.id === aluguel.livroId);
-            
-            if (livro) {
-                livrosAlugados.push({
-                    id: aluguel.id,
-                    livroId: aluguel.livroId,
-                    livro: livro.livro,
-                    autor: livro.autor,
-                    clienteNome: aluguel.clienteNome,
-                    quantidade: aluguel.quantidade,
-                    dataAluguel: aluguel.dataAluguel
-                });
-            }
-        }
-        
-        exibirLivrosAlugados(livrosAlugados);
-        console.log(`🔄 ${livrosAlugados.length} livros alugados carregados (do cache)`);
-        
-    } catch (error) {
-        console.error('❌ Erro ao carregar livros alugados:', error);
-        grid.innerHTML = '<div class="empty-state">Erro ao carregar livros alugados.</div>';
-    }
-}
-
-// ✅✅✅ FUNÇÃO AUXILIAR PARA CARREGAR ALUGUÉIS
-async function carregarAlugueisAtivos() {
-    if (alugueisCarregados) return;
-    
-    const alugueisSnapshot = await db.collection('alugueis')
-        .where('dataDevolucao', '==', null)
-        .get();
-    alugueis = alugueisSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    }));
-    alugueisCarregados = true;
 }
 
 function exibirLivrosDisponiveis(livros) {
@@ -626,11 +604,11 @@ function filtrarLivrosDisponiveis() {
     const termo = document.getElementById('buscaLivroAlugar').value.toLowerCase();
     
     if (!termo) {
-        exibirLivrosDisponiveis(livrosDisponiveis);
+        carregarLivrosDisponiveis();
         return;
     }
     
-    const livrosFiltrados = livrosDisponiveis.filter(livro => 
+    const livrosFiltrados = window.livrosDisponiveisFiltrados.filter(livro => 
         livro.livro.toLowerCase().includes(termo) || 
         livro.autor.toLowerCase().includes(termo)
     );
@@ -642,11 +620,11 @@ function filtrarLivrosAlugados() {
     const termo = document.getElementById('buscaLivroDevolver').value.toLowerCase();
     
     if (!termo) {
-        exibirLivrosAlugados(livrosAlugados);
+        carregarLivrosAlugados();
         return;
     }
     
-    const livrosFiltrados = livrosAlugados.filter(livro => 
+    const livrosFiltrados = window.livrosAlugadosFiltrados.filter(livro => 
         livro.livro.toLowerCase().includes(termo) || 
         livro.autor.toLowerCase().includes(termo) ||
         livro.clienteNome.toLowerCase().includes(termo)
@@ -656,10 +634,10 @@ function filtrarLivrosAlugados() {
 }
 
 function selecionarLivroAlugar(livroId) {
-    const livro = livrosDisponiveis.find(l => l.id === livroId);
+    const livro = window.livrosDisponiveisFiltrados.find(l => l.id === livroId);
     if (!livro) return;
     
-    livroSelecionadoAlugar = livro;
+    window.livroSelecionadoAlugar = livro;
     
     document.querySelectorAll('.livro-disponivel-card').forEach(card => {
         card.classList.remove('selecionado');
@@ -675,10 +653,10 @@ function selecionarLivroAlugar(livroId) {
 }
 
 function selecionarLivroDevolver(aluguelId) {
-    const aluguel = livrosAlugados.find(a => a.id === aluguelId);
+    const aluguel = window.livrosAlugadosFiltrados.find(a => a.id === aluguelId);
     if (!aluguel) return;
     
-    livroSelecionadoDevolver = aluguel;
+    window.livroSelecionadoDevolver = aluguel;
     
     document.querySelectorAll('.livro-alugado-card').forEach(card => {
         card.classList.remove('selecionado');
@@ -693,166 +671,22 @@ function selecionarLivroDevolver(aluguelId) {
     document.getElementById('btnDevolver').disabled = false;
 }
 
-async function alugarLivro() {
-    const clienteNome = document.getElementById('clienteNome').value.trim();
-    const quantidade = parseInt(document.getElementById('quantidadeAlugar').value);
-    
-    if (!livroSelecionadoAlugar || !clienteNome || !quantidade) {
-        alert("Por favor, preencha todos os campos e selecione um livro!");
-        return;
-    }
-    
-    if (quantidade > livroSelecionadoAlugar.quantidadeDisponivel) {
-        alert(`Quantidade indisponível! Apenas ${livroSelecionadoAlugar.quantidadeDisponivel} livros disponíveis.`);
-        return;
-    }
-    
-    try {
-        const aluguelData = {
-            livroId: livroSelecionadoAlugar.id,
-            clienteNome: clienteNome,
-            quantidade: quantidade,
-            dataAluguel: new Date(),
-            dataDevolucao: null,
-            prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        };
-        
-        await db.collection('alugueis').add(aluguelData);
-        
-        document.getElementById('clienteNome').value = '';
-        document.getElementById('buscaLivroAlugar').value = '';
-        document.getElementById('livroSelecionadoCard').style.display = 'none';
-        document.getElementById('btnAlugar').disabled = true;
-        livroSelecionadoAlugar = null;
-        
-        // ✅✅✅ CORREÇÃO: INVALIDA CACHE
-        invalidarCache();
-        
-        await carregarLivrosDisponiveis();
-        await carregarLivrosAlugados();
-        
-        alert('Livro alugado com sucesso!');
-        console.log("📚 Livro alugado com sucesso!");
-        
-    } catch (error) {
-        console.error('❌ Erro ao alugar livro:', error);
-        alert('Erro ao alugar livro. Tente novamente.');
-    }
-}
-
-async function devolverLivro() {
-    const quantidade = parseInt(document.getElementById('quantidadeDevolver').value);
-    
-    if (!livroSelecionadoDevolver || !quantidade) {
-        alert("Por favor, selecione um livro para devolver!");
-        return;
-    }
-    
-    if (quantidade > livroSelecionadoDevolver.quantidade) {
-        alert(`Quantidade inválida! Apenas ${livroSelecionadoDevolver.quantidade} livros foram alugados.`);
-        return;
-    }
-    
-    try {
-        if (quantidade === livroSelecionadoDevolver.quantidade) {
-            await db.collection('alugueis').doc(livroSelecionadoDevolver.id).update({
-                dataDevolucao: new Date()
-            });
-        } else {
-            const aluguelDoc = await db.collection('alugueis').doc(livroSelecionadoDevolver.id).get();
-            const aluguel = aluguelDoc.data();
-            
-            await db.collection('alugueis').doc(livroSelecionadoDevolver.id).update({
-                quantidade: aluguel.quantidade - quantidade
-            });
-        }
-        
-        document.getElementById('buscaLivroDevolver').value = '';
-        document.getElementById('livroDevolucaoSelecionadoCard').style.display = 'none';
-        document.getElementById('btnDevolver').disabled = true;
-        livroSelecionadoDevolver = null;
-        
-        // ✅✅✅ CORREÇÃO: INVALIDA CACHE
-        invalidarCache();
-        
-        await carregarLivrosDisponiveis();
-        await carregarLivrosAlugados();
-        
-        alert('Livro devolvido com sucesso!');
-        console.log("🔄 Livro devolvido com sucesso!");
-        
-    } catch (error) {
-        console.error('❌ Erro ao devolver livro:', error);
-        alert('Erro ao devolver livro. Tente novamente.');
-    }
-}
-
 function editarLivro(livroId) {
     const livroParaEditar = buscaAtiva ? 
-        todosLivros.find(l => l.id === livroId) : 
-        livros.find(l => l.id === livroId);
+        cache.todosLivros.find(l => l.id === livroId) : 
+        livrosPaginaAtual.find(l => l.id === livroId);
     
     if (livroParaEditar) {
-        livroEditando = livroParaEditar;
+        window.livroEditando = livroParaEditar;
         
-        document.getElementById('editLivro').value = livroEditando.livro || '';
-        document.getElementById('editAutor').value = livroEditando.autor || '';
-        document.getElementById('editCategoria').value = livroEditando.categoria || '';
-        document.getElementById('editQuantidade').value = livroEditando.quantidade || '';
-        document.getElementById('editPrateleira').value = livroEditando.prateleira || '';
-        document.getElementById('editBandeja').value = livroEditando.bandeja || '';
+        document.getElementById('editLivro').value = window.livroEditando.livro || '';
+        document.getElementById('editAutor').value = window.livroEditando.autor || '';
+        document.getElementById('editCategoria').value = window.livroEditando.categoria || '';
+        document.getElementById('editQuantidade').value = window.livroEditando.quantidade || '';
+        document.getElementById('editPrateleira').value = window.livroEditando.prateleira || '';
+        document.getElementById('editBandeja').value = window.livroEditando.bandeja || '';
         
         document.getElementById('editModal').style.display = 'block';
-        
-        console.log("✏️ Editando livro:", livroEditando.livro);
-    }
-}
-
-async function salvarEdicao() {
-    if (!livroEditando) return;
-    
-    try {
-        await db.collection('livros').doc(livroEditando.id).update({
-            livro: document.getElementById('editLivro').value.trim(),
-            autor: document.getElementById('editAutor').value.trim(),
-            categoria: document.getElementById('editCategoria').value.trim(),
-            quantidade: parseInt(document.getElementById('editQuantidade').value),
-            prateleira: document.getElementById('editPrateleira').value.trim(),
-            bandeja: document.getElementById('editBandeja').value.trim()
-        });
-        
-        // ✅✅✅ CORREÇÃO: INVALIDA CACHE
-        invalidarCache();
-        
-        await carregarLivros();
-        
-        fecharModal();
-        alert('Livro atualizado com sucesso!');
-        
-        console.log("✅ Livro atualizado:", livroEditando.id);
-    } catch (error) {
-        console.error('❌ Erro ao atualizar livro:', error);
-        alert('Erro ao atualizar livro. Tente novamente.');
-    }
-}
-
-async function excluirLivro(livroId) {
-    if (confirm('Tem certeza que deseja excluir este livro?')) {
-        try {
-            await db.collection('livros').doc(livroId).delete();
-            
-            // ✅✅✅ CORREÇÃO: INVALIDA CACHE
-            invalidarCache();
-            
-            await carregarLivros();
-            
-            alert('Livro excluído com sucesso!');
-            
-            console.log("🗑️ Livro excluído:", livroId);
-        } catch (error) {
-            console.error('❌ Erro ao excluir livro:', error);
-            alert('Erro ao excluir livro. Tente novamente.');
-        }
     }
 }
 
@@ -861,8 +695,59 @@ function fecharModal() {
     if (modal) {
         modal.style.display = 'none';
     }
-    livroEditando = null;
-    console.log("❌ Modal fechado");
+    window.livroEditando = null;
+}
+
+function atualizarControlesPaginacao() {
+    const totalPages = Math.ceil(cache.todosLivros.length / booksPerPage);
+    const pageInfo = `Página ${currentPage} de ${totalPages}`;
+    const resultsInfo = `${livrosPaginaAtual.length} livros nesta página`;
+    
+    const pageInfoElement = document.getElementById('pageInfo');
+    const pageInfoBottom = document.getElementById('pageInfoBottom');
+    const resultsInfoElement = document.getElementById('resultsInfo');
+    
+    if (pageInfoElement) pageInfoElement.textContent = pageInfo;
+    if (pageInfoBottom) pageInfoBottom.textContent = pageInfo;
+    if (resultsInfoElement) resultsInfoElement.textContent = resultsInfo;
+    
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    const prevBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
+    
+    if (prevBtn) {
+        prevBtn.disabled = currentPage === 1;
+        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+        if (prevBtnBottom) prevBtnBottom.disabled = currentPage === 1;
+        if (nextBtnBottom) nextBtnBottom.disabled = currentPage === totalPages || totalPages === 0;
+    }
+}
+
+function atualizarControlesPaginacaoBusca(totalEncontrados) {
+    const totalPages = Math.ceil(totalEncontrados / booksPerPage);
+    const pageInfo = `Página ${currentPage} de ${totalPages}`;
+    const resultsInfo = `${totalEncontrados} livros encontrados`;
+    
+    const pageInfoElement = document.getElementById('pageInfo');
+    const pageInfoBottom = document.getElementById('pageInfoBottom');
+    const resultsInfoElement = document.getElementById('resultsInfo');
+    
+    if (pageInfoElement) pageInfoElement.textContent = pageInfo;
+    if (pageInfoBottom) pageInfoBottom.textContent = pageInfo;
+    if (resultsInfoElement) resultsInfoElement.textContent = resultsInfo;
+    
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    const prevBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
+    
+    if (prevBtn) {
+        prevBtn.disabled = currentPage === 1;
+        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+        if (prevBtnBottom) prevBtnBottom.disabled = currentPage === 1;
+        if (nextBtnBottom) nextBtnBottom.disabled = currentPage === totalPages || totalPages === 0;
+    }
 }
 
 function formatarData(data) {
@@ -880,3 +765,62 @@ function formatarData(data) {
         return 'Data inválida';
     }
 }
+
+function inicializarPaginacao() {
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    const prevBtnBottom = document.getElementById('prevPageBottom');
+    const nextBtnBottom = document.getElementById('nextPageBottom');
+    const searchInput = document.getElementById('searchInput');
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => mudarPagina('prev'));
+        nextBtn.addEventListener('click', () => mudarPagina('next'));
+        if (prevBtnBottom) prevBtnBottom.addEventListener('click', () => mudarPagina('prev'));
+        if (nextBtnBottom) nextBtnBottom.addEventListener('click', () => mudarPagina('next'));
+    }
+
+    if (searchInput) {
+        let timeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                termoBusca = e.target.value.toLowerCase();
+                filtrarLivros();
+            }, 300);
+        });
+    }
+}
+
+function inicializarBuscaAluguel() {
+    const buscaInput = document.getElementById('buscaLivroAlugar');
+    if (buscaInput) {
+        let timeout;
+        buscaInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                filtrarLivrosDisponiveis();
+            }, 300);
+        });
+    }
+}
+
+function inicializarBuscaDevolucao() {
+    const buscaInput = document.getElementById('buscaLivroDevolver');
+    if (buscaInput) {
+        let timeout;
+        buscaInput.addEventListener('input', (e) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                filtrarLivrosAlugados();
+            }, 300);
+        });
+    }
+}
+
+// Variáveis globais para as páginas de aluguel
+window.livrosDisponiveisFiltrados = [];
+window.livrosAlugadosFiltrados = [];
+window.livroSelecionadoAlugar = null;
+window.livroSelecionadoDevolver = null;
+window.livroEditando = null;
