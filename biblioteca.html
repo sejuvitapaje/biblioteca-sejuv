@@ -47,6 +47,24 @@
                         <label for="searchInput">Buscar Livro</label>
                         <input type="text" id="searchInput" placeholder="Digite o nome do livro ou autor...">
                     </div>
+                    
+                    <!-- 🆕 FILTROS DE PRATELEIRA -->
+                    <div class="filtros-container">
+                        <div class="form-group">
+                            <label for="filtroPrateleira">Filtrar por Prateleira</label>
+                            <select id="filtroPrateleira">
+                                <option value="">Todas as prateleiras</option>
+                                <!-- As opções são preenchidas automaticamente pelo JavaScript -->
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>&nbsp;</label>
+                            <button type="button" id="limparFiltros" class="btn btn-secondary">
+                                🔄 Limpar Filtros
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Controles de Paginação -->
