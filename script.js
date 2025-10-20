@@ -8,7 +8,7 @@ const firebaseConfig = {
     measurementId: "G-N9FF16T3KF"
 };
 
-// ⚡ SISTEMA OFFLINE-FIRST - LEITURAS MÍNIMAS
+// ⚡ SISTEMA OFFLINE-FIRST - SINCRONIZAÇÃO INTELIGENTE
 let sistema = {
     cache: {
         livros: [],
@@ -16,7 +16,9 @@ let sistema = {
         timestamp: null,
         carregado: false,
         carregando: false,
-        primeiraCargaFeita: false
+        primeiraCargaFeita: false,
+        versaoCache: '2.0', // ⭐ FORÇA ATUALIZAÇÃO SE MUDAR
+        ultimaSincronizacao: null
     },
     estado: {
         paginaAtual: 1,
@@ -26,7 +28,13 @@ let sistema = {
     },
     contadores: {
         leiturasFirebase: 0,
-        ultimaLeitura: null
+        ultimaLeitura: null,
+        livrosCadastrados: 0
+    },
+    sincronizacao: {
+        emAndamento: false,
+        ultimaVerificacao: null,
+        listenersAtivos: false
     }
 };
 
@@ -36,17 +44,30 @@ function carregarCache() {
         const cacheSalvo = localStorage.getItem('biblioteca_cache');
         if (cacheSalvo) {
             const dados = JSON.parse(cacheSalvo);
-            // Cache válido por 24 horas
-            if (Date.now() - dados.timestamp < 86400000) {
+            
+            // ⭐ VERIFICA SE O CACHE É DA VERSÃO ATUAL
+            if (dados.versaoCache !== sistema.cache.versaoCache) {
+                console.log("🔄 Versão do cache desatualizada, necessária nova carga");
+                return false;
+            }
+            
+            // Cache válido por 2 horas (mais frequente para detectar mudanças)
+            if (Date.now() - dados.timestamp < 7200000) {
                 sistema.cache.livros = dados.livros || [];
                 sistema.cache.alugueis = dados.alugueis || [];
                 sistema.cache.timestamp = dados.timestamp;
                 sistema.cache.carregado = sistema.cache.livros.length > 0;
                 sistema.cache.primeiraCargaFeita = true;
+                sistema.cache.ultimaSincronizacao = dados.ultimaSincronizacao;
+                
                 console.log(`♻️ Cache carregado: ${sistema.cache.livros.length} livros, ${sistema.cache.alugueis.length} aluguéis`);
+                
+                // ⭐ ATUALIZA CONTADOR GLOBAL
+                sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
+                
                 return true;
             } else {
-                console.log("📅 Cache expirado, necessária nova carga");
+                console.log("🕒 Cache expirado (2h), necessária nova carga");
             }
         }
     } catch (e) {
@@ -59,7 +80,11 @@ function carregarCache() {
 function salvarCache() {
     try {
         sistema.cache.timestamp = Date.now();
+        sistema.cache.ultimaSincronizacao = new Date();
+        sistema.cache.versaoCache = '2.0';
+        
         localStorage.setItem('biblioteca_cache', JSON.stringify(sistema.cache));
+        console.log(`💾 Cache salvo: ${sistema.cache.livros.length} livros`);
     } catch (e) {
         console.error("❌ Erro ao salvar cache:", e);
     }
@@ -76,7 +101,7 @@ try {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("📚 Sistema carregado - Modo Offline First");
+    console.log("📚 Sistema carregado - Sincronização Inteligente");
     
     // ⚡ PRIMEIRO: TENTA CACHE LOCAL (INSTANTÂNEO - 0 LEITURAS)
     const temCache = carregarCache();
@@ -93,8 +118,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // ⚡ MOSTRA CACHE IMEDIATAMENTE (se tiver)
         if (temCache) {
             atualizarInterface();
+            // ⭐ INICIA SINCRONIZAÇÃO EM BACKGROUND
+            setTimeout(verificarSincronizacao, 2000);
         } else {
-            // Carrega dados automaticamente mas COM CONTROLE
             carregarDadosFirebase();
         }
     }
@@ -103,11 +129,10 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log("💰 Página de aluguel");
         inicializarBuscaAluguel();
         
-        // Carrega dados automaticamente mas COM CONTROLE
         if (sistema.cache.carregado) {
             carregarLivrosDisponiveis();
+            setTimeout(verificarSincronizacao, 2000);
         } else {
-            // Mostra loading e carrega dados
             document.getElementById('livrosDisponiveisGrid').innerHTML = '<div class="loading">Carregando livros disponíveis...</div>';
             carregarDadosFirebase().then(() => {
                 if (sistema.cache.carregado) {
@@ -121,11 +146,10 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log("🔄 Página de devolução");
         inicializarBuscaDevolucao();
         
-        // Carrega dados automaticamente mas COM CONTROLE
         if (sistema.cache.carregado) {
             carregarLivrosAlugados();
+            setTimeout(verificarSincronizacao, 2000);
         } else {
-            // Mostra loading e carrega dados
             document.getElementById('livrosAlugadosGrid').innerHTML = '<div class="loading">Carregando livros alugados...</div>';
             carregarDadosFirebase().then(() => {
                 if (sistema.cache.carregado) {
@@ -142,11 +166,168 @@ document.addEventListener('DOMContentLoaded', function() {
         window.addEventListener('click', (e) => e.target === modal && fecharModal());
         document.addEventListener('keydown', (e) => e.key === 'Escape' && fecharModal());
     }
+    
+    // ⭐ INICIA OUVINTES EM TEMPO REAL (APENAS 1 LEITURA EXTRA)
+    if (db && !sistema.sincronizacao.listenersAtivos) {
+        iniciarOuvintesTempoReal();
+    }
 });
 
-// ⚡ FUNÇÃO PRINCIPAL - MÁXIMO 2 LEITURAS (COM CONTROLE RIGOROSO)
+// ⭐ NOVO: OUVINTES EM TEMPO REAL PARA SINCRONIZAÇÃO
+function iniciarOuvintesTempoReal() {
+    if (!db || sistema.sincronizacao.listenersAtivos) return;
+    
+    try {
+        console.log("👂 Iniciando ouvintes em tempo real...");
+        
+        // ⭐ OUVIDOR PARA NOVOS LIVROS (1 LEITURA CONTÍNUA)
+        db.collection('livros')
+            .where('dataCadastro', '>', new Date(Date.now() - 86400000)) // Últimas 24h
+            .onSnapshot((snapshot) => {
+                if (!snapshot.empty && sistema.cache.carregado) {
+                    console.log("🔄 Detectadas mudanças em livros, verificando sincronização...");
+                    verificarSincronizacao();
+                }
+            }, (error) => {
+                console.log("ℹ️ Ouvinte de livros desativado (modo offline)");
+            });
+        
+        sistema.sincronizacao.listenersAtivos = true;
+        console.log("✅ Ouvintes em tempo real ativados");
+        
+    } catch (error) {
+        console.log("⚠️ Ouvintes em tempo real não disponíveis");
+    }
+}
+
+// ⭐ NOVO: VERIFICA SE PRECISA SINCRONIZAR
+async function verificarSincronizacao() {
+    if (!db || sistema.sincronizacao.emAndamento || !sistema.cache.carregado) return;
+    
+    // Verifica a cada 5 minutos no máximo
+    if (sistema.sincronizacao.ultimaVerificacao && 
+        Date.now() - sistema.sincronizacao.ultimaVerificacao < 300000) {
+        return;
+    }
+    
+    sistema.sincronizacao.ultimaVerificacao = Date.now();
+    
+    try {
+        console.log("🔍 Verificando sincronização...");
+        
+        // ⭐ LEITURA RÁPIDA: CONTA APENAS O TOTAL DE LIVROS (1 LEITURA LEVE)
+        const contadorSnapshot = await db.collection('livros').get();
+        const totalFirebase = contadorSnapshot.size;
+        const totalLocal = sistema.cache.livros.length;
+        
+        console.log(`📊 Comparação: Local ${totalLocal} vs Firebase ${totalFirebase}`);
+        
+        if (totalFirebase !== totalLocal) {
+            console.log(`🔄 Sincronização necessária! (Diferença: ${Math.abs(totalFirebase - totalLocal)} livros)`);
+            mostrarNotificacaoSincronizacao(totalFirebase - totalLocal);
+            
+            // ⭐ SINCRONIZA AUTOMATICAMENTE SE DIFERENÇA PEQUENA
+            if (Math.abs(totalFirebase - totalLocal) <= 10) {
+                console.log("🔄 Sincronização automática iniciada...");
+                sincronizarDados();
+            }
+        } else {
+            console.log("✅ Dados sincronizados");
+        }
+        
+    } catch (error) {
+        console.log("❌ Erro na verificação de sincronização:", error);
+    }
+}
+
+// ⭐ NOVO: MOSTRA NOTIFICAÇÃO DE SINCRONIZAÇÃO
+function mostrarNotificacaoSincronizacao(diferenca) {
+    if (Math.abs(diferenca) <= 2) return; // Ignora diferenças muito pequenas
+    
+    const notification = document.createElement('div');
+    notification.className = 'sync-notification';
+    notification.innerHTML = `
+        <div class="sync-alert">
+            <span>🔄 ${diferenca > 0 ? diferenca + ' livros novos' : Math.abs(diferenca) + ' livros removidos'} no servidor</span>
+            <button onclick="sincronizarDados()" class="btn btn-sm btn-primary">Sincronizar Agora</button>
+            <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm btn-secondary">Ignorar</button>
+        </div>
+    `;
+    
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        padding: 10px;
+        border-radius: 5px;
+        z-index: 10000;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove automaticamente após 10 segundos
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 10000);
+}
+
+// ⭐ NOVO: SINCRONIZA DADOS COMPLETOS
+async function sincronizarDados() {
+    if (!db || sistema.sincronizacao.emAndamento) return;
+    
+    sistema.sincronizacao.emAndamento = true;
+    console.log("🔄 Iniciando sincronização completa...");
+    
+    try {
+        // ⭐ LEITURA 1: LIVROS ATUALIZADOS
+        const livrosSnapshot = await db.collection('livros').get();
+        const livrosFirebase = livrosSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        // ⭐ LEITURA 2: ALUGUÉIS ATUALIZADOS
+        const alugueisSnapshot = await db.collection('alugueis')
+            .where('dataDevolucao', '==', null)
+            .get();
+        
+        const alugueisFirebase = alugueisSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        // ATUALIZA CACHE
+        sistema.cache.livros = livrosFirebase;
+        sistema.cache.alugueis = alugueisFirebase;
+        sistema.cache.carregado = true;
+        
+        salvarCache();
+        
+        sistema.contadores.leiturasFirebase += 2;
+        sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
+        
+        console.log(`✅ Sincronização completa: ${sistema.cache.livros.length} livros, ${sistema.cache.alugueis.length} aluguéis`);
+        
+        // ATUALIZA INTERFACE
+        atualizarTodasInterfaces();
+        
+        // REMOVE NOTIFICAÇÕES
+        document.querySelectorAll('.sync-notification').forEach(n => n.remove());
+        
+    } catch (error) {
+        console.error('❌ Erro na sincronização:', error);
+    } finally {
+        sistema.sincronizacao.emAndamento = false;
+    }
+}
+
+// ⚡ FUNÇÃO PRINCIPAL - MÁXIMO 2 LEITURAS
 async function carregarDadosFirebase() {
-    // ⭐ CRÍTICO: Verificações rigorosas para evitar leituras desnecessárias
     if (!db) {
         console.log("❌ Firebase não disponível");
         return false;
@@ -166,12 +347,11 @@ async function carregarDadosFirebase() {
         sistema.cache.carregando = true;
         console.log("📥 Iniciando leitura do Firebase...");
         
-        // Mostra loading state se estiver na página de biblioteca
         if (document.getElementById('livrosList')) {
             document.getElementById('livrosList').innerHTML = '<div class="loading">Carregando biblioteca...</div>';
         }
         
-        // ⚡ LEITURA 1: LIVROS (APENAS UMA VEZ) - ⭐ CORREÇÃO: SEM PAGINAÇÃO/LIMITE
+        // ⚡ LEITURA 1: LIVROS
         console.log("📚 Buscando TODOS os livros...");
         const livrosSnapshot = await db.collection('livros').get();
         
@@ -180,7 +360,7 @@ async function carregarDadosFirebase() {
             ...doc.data()
         }));
         
-        // ⚡ LEITURA 2: ALUGUÉIS ATIVOS (APENAS UMA VEZ)
+        // ⚡ LEITURA 2: ALUGUÉIS ATIVOS
         console.log("📋 Buscando TODOS os aluguéis ativos...");
         const alugueisSnapshot = await db.collection('alugueis')
             .where('dataDevolucao', '==', null)
@@ -191,22 +371,25 @@ async function carregarDadosFirebase() {
             ...doc.data()
         }));
         
-        // ⭐ ATUALIZA ESTADO DO CACHE
+        // ATUALIZA ESTADO
         sistema.cache.carregado = true;
         sistema.cache.carregando = false;
         sistema.cache.primeiraCargaFeita = true;
-        sistema.cache.timestamp = Date.now();
         
         salvarCache();
         
-        // ⭐ ATUALIZA CONTADORES
         sistema.contadores.leiturasFirebase += 2;
+        sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
         sistema.contadores.ultimaLeitura = new Date();
         
         console.log(`✅ Dados carregados: ${sistema.cache.livros.length} livros, ${sistema.cache.alugueis.length} aluguéis ativos`);
         console.log(`🎯 TOTAL DE LEITURAS FIREBASE: ${sistema.contadores.leiturasFirebase}`);
         
-        // ⭐ ATUALIZA TODAS AS INTERFACES VISÍVEIS
+        // INICIA OUVINTES EM TEMPO REAL
+        if (!sistema.sincronizacao.listenersAtivos) {
+            iniciarOuvintesTempoReal();
+        }
+        
         atualizarTodasInterfaces();
         
         return true;
@@ -215,7 +398,6 @@ async function carregarDadosFirebase() {
         sistema.cache.carregando = false;
         console.error('❌ Erro ao carregar dados:', error);
         
-        // Mostra estado de erro
         if (document.getElementById('livrosList')) {
             document.getElementById('livrosList').innerHTML = `
                 <div class="empty-state">
@@ -232,30 +414,26 @@ async function carregarDadosFirebase() {
     }
 }
 
-// ⭐ NOVA FUNÇÃO: ATUALIZA TODAS AS INTERFACES VISÍVEIS
+// ⭐ ATUALIZA TODAS AS INTERFACES VISÍVEIS
 function atualizarTodasInterfaces() {
     if (!sistema.cache.carregado) return;
     
-    // ⭐ CORREÇÃO: ATUALIZA CONTADOR SEMPRE QUE OS DADOS MUDAM
     atualizarContadorLivros();
     
-    // Atualiza página da biblioteca se estiver visível
     if (document.getElementById('livrosList')) {
         atualizarInterface();
     }
     
-    // Atualiza página de aluguel se estiver visível
     if (document.getElementById('livrosDisponiveisGrid')) {
         carregarLivrosDisponiveis();
     }
     
-    // Atualiza página de devolução se estiver visível
     if (document.getElementById('livrosAlugadosGrid')) {
         carregarLivrosAlugados();
     }
 }
 
-// ⭐ NOVA FUNÇÃO: ATUALIZA CONTADOR DE LIVROS (0 LEITURAS)
+// ⭐ ATUALIZA CONTADOR DE LIVROS (0 LEITURAS)
 function atualizarContadorLivros() {
     const totalElement = document.getElementById('totalLivros');
     if (totalElement && sistema.cache.carregado) {
@@ -264,13 +442,16 @@ function atualizarContadorLivros() {
     }
 }
 
-// ⭐ FUNÇÃO CRÍTICA: ATUALIZAÇÃO INCREMENTAL (0 LEITURAS PARA OPERAÇÕES CRUD)
+// ⭐ ATUALIZAÇÃO INCREMENTAL (0 LEITURAS PARA OPERAÇÕES CRUD)
 function atualizarCacheLocal(operacao, dados) {
     if (!sistema.cache.carregado) return;
+    
+    let mudou = false;
     
     switch(operacao) {
         case 'CADASTRAR_LIVRO':
             sistema.cache.livros.unshift(dados);
+            mudou = true;
             break;
             
         case 'EDITAR_LIVRO':
@@ -280,17 +461,20 @@ function atualizarCacheLocal(operacao, dados) {
                     ...sistema.cache.livros[indexEditar], 
                     ...dados 
                 };
+                mudou = true;
             }
             break;
             
         case 'EXCLUIR_LIVRO':
+            const antes = sistema.cache.livros.length;
             sistema.cache.livros = sistema.cache.livros.filter(l => l.id !== dados.id);
-            // Remove aluguéis relacionados
             sistema.cache.alugueis = sistema.cache.alugueis.filter(a => a.livroId !== dados.id);
+            mudou = sistema.cache.livros.length !== antes;
             break;
             
         case 'ALUGAR_LIVRO':
             sistema.cache.alugueis.push(dados);
+            mudou = true;
             break;
             
         case 'DEVOLVER_LIVRO':
@@ -302,17 +486,16 @@ function atualizarCacheLocal(operacao, dados) {
                     sistema.cache.alugueis[indexAluguel].quantidade = dados.novaQuantidade;
                 }
             }
+            mudou = true;
             break;
     }
     
-    salvarCache();
-    console.log(`🔄 Cache atualizado: ${operacao}`);
-    
-    // ⭐ CORREÇÃO: ATUALIZA CONTADOR APÓS QUALQUER MODIFICAÇÃO
-    atualizarContadorLivros();
-    
-    // Atualiza interfaces após modificação
-    setTimeout(atualizarTodasInterfaces, 100);
+    if (mudou) {
+        salvarCache();
+        console.log(`🔄 Cache atualizado: ${operacao}`);
+        atualizarContadorLivros();
+        setTimeout(atualizarTodasInterfaces, 100);
+    }
 }
 
 // ⚡ CADASTRAR LIVRO - 0 LEITURAS, 1 ESCRITA
@@ -334,7 +517,6 @@ async function cadastrarLivro(e) {
         dataCadastro: new Date()
     };
     
-    // Validação
     if (Object.values(livroData).some(valor => 
         valor === '' || (typeof valor === 'string' && !valor.trim()) || 
         (typeof valor === 'number' && (isNaN(valor) || valor <= 0))
@@ -344,16 +526,13 @@ async function cadastrarLivro(e) {
     }
     
     try {
-        // ⭐ ESCRITA NO FIREBASE (1 ESCRITA)
         const docRef = await db.collection('livros').add(livroData);
         const livroComId = { id: docRef.id, ...livroData };
         
-        // ⭐ ATUALIZAÇÃO LOCAL (0 LEITURAS)
         atualizarCacheLocal('CADASTRAR_LIVRO', livroComId);
         
         document.getElementById('formCadastro').reset();
         
-        // Feedback
         const successMessage = document.getElementById('successMessage');
         if (successMessage) {
             successMessage.style.display = 'block';
@@ -382,10 +561,8 @@ async function salvarEdicao() {
             bandeja: document.getElementById('editBandeja').value.trim()
         };
         
-        // ⭐ ESCRITA NO FIREBASE (1 ESCRITA)
         await db.collection('livros').doc(window.livroEditando.id).update(dadosAtualizados);
         
-        // ⭐ ATUALIZAÇÃO LOCAL (0 LEITURAS)
         atualizarCacheLocal('EDITAR_LIVRO', {
             id: window.livroEditando.id,
             ...dadosAtualizados
@@ -406,10 +583,8 @@ async function excluirLivro(livroId) {
     
     if (confirm('Tem certeza que deseja excluir este livro?')) {
         try {
-            // ⭐ ESCRITA NO FIREBASE (1 ESCRITA)
             await db.collection('livros').doc(livroId).delete();
             
-            // ⭐ ATUALIZAÇÃO LOCAL (0 LEITURAS)
             atualizarCacheLocal('EXCLUIR_LIVRO', { id: livroId });
             
             alert('Livro excluído com sucesso!');
@@ -433,7 +608,6 @@ async function alugarLivro() {
         return;
     }
     
-    // Verifica se a quantidade é válida
     if (quantidade > window.livroSelecionadoAlugar.quantidadeDisponivel) {
         alert(`Quantidade indisponível! Apenas ${window.livroSelecionadoAlugar.quantidadeDisponivel} livros disponíveis.`);
         return;
@@ -449,10 +623,8 @@ async function alugarLivro() {
             prazoDevolucao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         };
         
-        // ⭐ ESCRITA NO FIREBASE (1 ESCRITA)
         const docRef = await db.collection('alugueis').add(aluguelData);
         
-        // ⭐ ATUALIZAÇÃO LOCAL (0 LEITURAS)
         atualizarCacheLocal('ALUGAR_LIVRO', {
             id: docRef.id,
             ...aluguelData
@@ -488,12 +660,10 @@ async function devolverLivro() {
     
     try {
         if (quantidade === window.livroSelecionadoDevolver.quantidade) {
-            // ⭐ ESCRITA NO FIREBASE (1 ESCRITA)
             await db.collection('alugueis').doc(window.livroSelecionadoDevolver.id).update({
                 dataDevolucao: new Date()
             });
             
-            // ⭐ ATUALIZAÇÃO LOCAL (0 LEITURAS)
             atualizarCacheLocal('DEVOLVER_LIVRO', {
                 id: window.livroSelecionadoDevolver.id,
                 devolucaoTotal: true
@@ -501,12 +671,10 @@ async function devolverLivro() {
             
         } else {
             const novaQuantidade = window.livroSelecionadoDevolver.quantidade - quantidade;
-            // ⭐ ESCRITA NO FIREBASE (1 ESCRITA)
             await db.collection('alugueis').doc(window.livroSelecionadoDevolver.id).update({
                 quantidade: novaQuantidade
             });
             
-            // ⭐ ATUALIZAÇÃO LOCAL (0 LEITURAS)
             atualizarCacheLocal('DEVOLVER_LIVRO', {
                 id: window.livroSelecionadoDevolver.id,
                 devolucaoTotal: false,
@@ -581,10 +749,7 @@ function carregarLivrosAlugados() {
 function atualizarInterface() {
     if (!sistema.cache.carregado) return;
     
-    // ⭐ CORREÇÃO: CONTADOR SEMPRE ATUALIZADO
     atualizarContadorLivros();
-    
-    // Aplica filtros e paginação
     aplicarFiltrosEPaginacao();
 }
 
@@ -594,7 +759,6 @@ function aplicarFiltrosEPaginacao() {
     
     let livrosFiltrados = sistema.cache.livros;
     
-    // Filtro por texto
     if (sistema.estado.termoBusca) {
         livrosFiltrados = livrosFiltrados.filter(livro => 
             livro.livro.toLowerCase().includes(sistema.estado.termoBusca) || 
@@ -602,14 +766,12 @@ function aplicarFiltrosEPaginacao() {
         );
     }
     
-    // Filtro por prateleira
     if (sistema.estado.filtroPrateleira) {
         livrosFiltrados = livrosFiltrados.filter(livro => 
             livro.prateleira === sistema.estado.filtroPrateleira
         );
     }
     
-    // Paginação
     const startIndex = (sistema.estado.paginaAtual - 1) * sistema.estado.livrosPorPagina;
     const endIndex = startIndex + sistema.estado.livrosPorPagina;
     const livrosPagina = livrosFiltrados.slice(startIndex, endIndex);
@@ -930,6 +1092,13 @@ function mudarPagina(direction) {
         sistema.estado.paginaAtual--;
     }
     aplicarFiltrosEPaginacao();
+}
+
+// ⭐ NOVO: FORÇA SINCRONIZAÇÃO MANUAL
+function forcarSincronizacao() {
+    if (confirm('Isso irá recarregar todos os dados do servidor para sincronização. Continuar?')) {
+        sincronizarDados();
+    }
 }
 
 // Variáveis globais
