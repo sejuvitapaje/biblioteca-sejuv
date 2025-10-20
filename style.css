@@ -581,6 +581,54 @@ input:focus, select:focus {
     background: var(--vermelho);
 }
 
+/* 🆕 ESTILOS PARA OS FILTROS */
+.filtros-container {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--cinza-claro);
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.filtros-container .form-group {
+    margin-bottom: 0;
+}
+
+.filtros-container select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid var(--cinza-claro);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: var(--branco);
+}
+
+.filtros-container select:focus {
+    outline: none;
+    border-color: var(--azul-claro);
+}
+
+.filtros-container .btn {
+    white-space: nowrap;
+    height: fit-content;
+    margin-top: 1.6rem;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .filtros-container {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .filtros-container .btn {
+        margin-top: 0;
+    }
+}
+
 @media (max-width: 768px) {
     .sidebar {
         width: 100%;
