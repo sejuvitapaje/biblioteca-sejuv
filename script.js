@@ -17,7 +17,7 @@ let sistema = {
         carregado: false,
         carregando: false,
         primeiraCargaFeita: false,
-        versaoCache: '2.0', // ⭐ FORÇA ATUALIZAÇÃO SE MUDAR
+        versaoCache: '2.1', // ⭐ ATUALIZAÇÃO: Nova versão para contador de quantidade
         ultimaSincronizacao: null
     },
     estado: {
@@ -29,7 +29,8 @@ let sistema = {
     contadores: {
         leiturasFirebase: 0,
         ultimaLeitura: null,
-        livrosCadastrados: 0
+        livrosCadastrados: 0,
+        quantidadeTotalLivros: 0 // ⭐ NOVO: Contador de quantidade total
     },
     sincronizacao: {
         emAndamento: false,
@@ -62,8 +63,9 @@ function carregarCache() {
                 
                 console.log(`♻️ Cache carregado: ${sistema.cache.livros.length} livros, ${sistema.cache.alugueis.length} aluguéis`);
                 
-                // ⭐ ATUALIZA CONTADOR GLOBAL
+                // ⭐ ATUALIZA CONTADORES GLOBAIS
                 sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
+                sistema.contadores.quantidadeTotalLivros = calcularQuantidadeTotal();
                 
                 return true;
             } else {
@@ -81,13 +83,18 @@ function salvarCache() {
     try {
         sistema.cache.timestamp = Date.now();
         sistema.cache.ultimaSincronizacao = new Date();
-        sistema.cache.versaoCache = '2.0';
+        sistema.cache.versaoCache = '2.1';
         
         localStorage.setItem('biblioteca_cache', JSON.stringify(sistema.cache));
         console.log(`💾 Cache salvo: ${sistema.cache.livros.length} livros`);
     } catch (e) {
         console.error("❌ Erro ao salvar cache:", e);
     }
+}
+
+// ⭐ NOVO: CALCULA QUANTIDADE TOTAL DE LIVROS
+function calcularQuantidadeTotal() {
+    return sistema.cache.livros.reduce((total, livro) => total + (livro.quantidade || 0), 0);
 }
 
 // ✅ INICIALIZAÇÃO SEGURA
@@ -310,6 +317,7 @@ async function sincronizarDados() {
         
         sistema.contadores.leiturasFirebase += 2;
         sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
+        sistema.contadores.quantidadeTotalLivros = calcularQuantidadeTotal();
         
         console.log(`✅ Sincronização completa: ${sistema.cache.livros.length} livros, ${sistema.cache.alugueis.length} aluguéis`);
         
@@ -380,9 +388,11 @@ async function carregarDadosFirebase() {
         
         sistema.contadores.leiturasFirebase += 2;
         sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
+        sistema.contadores.quantidadeTotalLivros = calcularQuantidadeTotal();
         sistema.contadores.ultimaLeitura = new Date();
         
         console.log(`✅ Dados carregados: ${sistema.cache.livros.length} livros, ${sistema.cache.alugueis.length} aluguéis ativos`);
+        console.log(`📊 Quantidade total de livros: ${sistema.contadores.quantidadeTotalLivros}`);
         console.log(`🎯 TOTAL DE LEITURAS FIREBASE: ${sistema.contadores.leiturasFirebase}`);
         
         // INICIA OUVINTES EM TEMPO REAL
@@ -437,8 +447,9 @@ function atualizarTodasInterfaces() {
 function atualizarContadorLivros() {
     const totalElement = document.getElementById('totalLivros');
     if (totalElement && sistema.cache.carregado) {
-        totalElement.textContent = `${sistema.cache.livros.length} livros cadastrados`;
-        console.log(`🔢 Contador atualizado: ${sistema.cache.livros.length} livros`);
+        // ⭐ ATUALIZAÇÃO: Mostra tanto quantidade de títulos quanto quantidade total
+        totalElement.textContent = `${sistema.cache.livros.length} títulos cadastrados | ${sistema.contadores.quantidadeTotalLivros} livros no total`;
+        console.log(`🔢 Contador atualizado: ${sistema.cache.livros.length} títulos, ${sistema.contadores.quantidadeTotalLivros} livros`);
     }
 }
 
@@ -488,14 +499,34 @@ function atualizarCacheLocal(operacao, dados) {
             }
             mudou = true;
             break;
+            
+        case 'ATUALIZAR_QUANTIDADE':
+            const indexAtualizar = sistema.cache.livros.findIndex(l => l.id === dados.id);
+            if (indexAtualizar !== -1) {
+                sistema.cache.livros[indexAtualizar].quantidade += dados.quantidade;
+                mudou = true;
+            }
+            break;
     }
     
     if (mudou) {
+        // ⭐ ATUALIZA CONTADOR DE QUANTIDADE TOTAL
+        sistema.contadores.quantidadeTotalLivros = calcularQuantidadeTotal();
+        sistema.contadores.livrosCadastrados = sistema.cache.livros.length;
+        
         salvarCache();
         console.log(`🔄 Cache atualizado: ${operacao}`);
         atualizarContadorLivros();
         setTimeout(atualizarTodasInterfaces, 100);
     }
+}
+
+// ⭐ NOVO: VERIFICA SE LIVRO JÁ EXISTE
+function verificarLivroExistente(livro, autor) {
+    return sistema.cache.livros.find(l => 
+        l.livro.toLowerCase() === livro.toLowerCase() && 
+        l.autor.toLowerCase() === autor.toLowerCase()
+    );
 }
 
 // ⚡ CADASTRAR LIVRO - 0 LEITURAS, 1 ESCRITA
@@ -526,6 +557,50 @@ async function cadastrarLivro(e) {
     }
     
     try {
+        // ⭐ NOVO: VERIFICA SE LIVRO JÁ EXISTE
+        const livroExistente = verificarLivroExistente(livroData.livro, livroData.autor);
+        
+        if (livroExistente) {
+            const confirmacao = confirm(
+                `⚠️ Este livro já está cadastrado!\n\n` +
+                `Livro: ${livroExistente.livro}\n` +
+                `Autor: ${livroExistente.autor}\n` +
+                `Quantidade atual: ${livroExistente.quantidade}\n\n` +
+                `Deseja adicionar ${livroData.quantidade} unidade(s) à quantidade existente?`
+            );
+            
+            if (confirmacao) {
+                // ATUALIZA QUANTIDADE DO LIVRO EXISTENTE
+                const novaQuantidade = livroExistente.quantidade + livroData.quantidade;
+                await db.collection('livros').doc(livroExistente.id).update({
+                    quantidade: novaQuantidade
+                });
+                
+                // ATUALIZA CACHE LOCAL
+                atualizarCacheLocal('ATUALIZAR_QUANTIDADE', {
+                    id: livroExistente.id,
+                    quantidade: livroData.quantidade
+                });
+                
+                document.getElementById('formCadastro').reset();
+                
+                const successMessage = document.getElementById('successMessage');
+                if (successMessage) {
+                    successMessage.innerHTML = `✅ Quantidade atualizada! Agora tem ${novaQuantidade} unidade(s) deste livro.`;
+                    successMessage.style.display = 'block';
+                    setTimeout(() => successMessage.style.display = 'none', 5000);
+                }
+                
+                console.log(`✅ Quantidade do livro atualizada: +${livroData.quantidade} (total: ${novaQuantidade})`);
+                return;
+            } else {
+                // USUÁRIO CANCELOU - NÃO FAZ NADA
+                console.log("❌ Cadastro cancelado pelo usuário");
+                return;
+            }
+        }
+        
+        // ⭐ CADASTRA NOVO LIVRO (se não existir)
         const docRef = await db.collection('livros').add(livroData);
         const livroComId = { id: docRef.id, ...livroData };
         
@@ -535,11 +610,12 @@ async function cadastrarLivro(e) {
         
         const successMessage = document.getElementById('successMessage');
         if (successMessage) {
+            successMessage.innerHTML = '✅ Livro cadastrado com sucesso!';
             successMessage.style.display = 'block';
             setTimeout(() => successMessage.style.display = 'none', 3000);
         }
         
-        console.log("✅ Livro cadastrado (0 leituras, 1 escrita)");
+        console.log("✅ Novo livro cadastrado (0 leituras, 1 escrita)");
         
     } catch (error) {
         console.error('❌ Erro ao cadastrar:', error);
