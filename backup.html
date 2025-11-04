@@ -227,24 +227,21 @@
             border: 1px solid #f5c6cb;
         }
 
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 30px;
-            flex-wrap: wrap;
-        }
-
-        .nav-buttons .btn {
-            width: auto;
-            padding: 12px 20px;
+        .back-button {
+            display: inline-block;
+            padding: 12px 25px;
             background: rgba(255, 255, 255, 0.9);
             color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
             border: 2px solid #667eea;
             font-weight: 600;
+            transition: all 0.3s ease;
+            text-align: center;
+            margin-top: 20px;
         }
 
-        .nav-buttons .btn:hover {
+        .back-button:hover {
             background: #667eea;
             color: white;
             transform: translateY(-2px);
@@ -261,16 +258,6 @@
             
             .header h1 {
                 font-size: 2rem;
-            }
-            
-            .nav-buttons {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .nav-buttons .btn {
-                width: 100%;
-                max-width: 250px;
             }
         }
     </style>
@@ -390,15 +377,14 @@
                 </div>
             </div>
 
-            <div class="nav-buttons">
-                <a href="index.html" class="btn">🏠 Cadastrar Livros</a>
-                <a href="biblioteca.html" class="btn">📖 Ver Acervo</a>
-                <a href="alugar.html" class="btn">💰 Alugar/Devolver</a>
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="biblioteca.html" class="back-button">📖 Voltar para o Acervo</a>
             </div>
         </div>
     </div>
 
     <script>
+        // ... (o mesmo script do backup anterior)
         let sistemaBackup = {
             livros: [],
             alugueis: [],
