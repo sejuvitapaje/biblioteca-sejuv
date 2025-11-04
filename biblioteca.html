@@ -13,17 +13,14 @@
     <div class="sidebar">
         <div class="logo">Livros <br> da <br> Sejuv</div>
         <div class="nav-links">
-            <a href="index.html" class="nav-link active">
+            <a href="index.html" class="nav-link">
                 <i class="fas fa-book-medical"></i> Cadastrar Livro
             </a>
-            <a href="biblioteca.html" class="nav-link">
+            <a href="biblioteca.html" class="nav-link active">
                 <i class="fas fa-book"></i> Acervo
             </a>
             <a href="alugar.html" class="nav-link">
                 <i class="fas fa-hand-holding-usd"></i> Alugar/Devolver
-            </a>
-                <a href="backup.html" class="nav-link">
-                <i class="fas fa-hand-holding-usd"></i> Backup
             </a>
         </div>
     </div>
@@ -31,113 +28,80 @@
     <div class="main-content">
         <header>
             <div class="container">
-                <h1>Dados Cadastrados</h1>
+                <h1>Acervo da Biblioteca</h1>
+                <div class="header-info">
+                    <span id="totalLivros">0 livros cadastrados</span>
+                    <a href="backup.html" class="btn btn-primary" style="margin-left: auto;">
+                        <i class="fas fa-database"></i> Backup
+                    </a>
+                </div>
             </div>
         </header>
 
         <div class="container">
-            <div class="library-header">
-                <h1>Acervo da Biblioteca</h1>
-                <div class="library-stats">
-                    <span id="totalLivros">Carregando...</span>
-                    <span id="paginaInfo">Página 1</span>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="search-container">
-                    <div class="form-group">
-                        <label for="searchInput">Buscar Livro</label>
-                        <input type="text" id="searchInput" placeholder="Digite o nome do livro ou autor...">
-                    </div>
-                    
-                    <!-- 🆕 FILTROS DE PRATELEIRA -->
-                    <div class="filtros-container">
-                        <div class="form-group">
-                            <label for="filtroPrateleira">Filtrar por Prateleira</label>
-                            <select id="filtroPrateleira">
-                                <option value="">Todas as prateleiras</option>
-                                <!-- As opções são preenchidas automaticamente pelo JavaScript -->
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>&nbsp;</label>
-                            <button type="button" id="limparFiltros" class="btn btn-secondary">
-                                🔄 Limpar Filtros
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Controles de Paginação -->
-                <div class="pagination-controls">
-                    <button id="prevPage" class="btn btn-secondary" disabled>
-                        <i class="fas fa-chevron-left"></i> Anterior
-                    </button>
-                    
-                    <div class="page-info">
-                        <span id="pageInfo">Página 1 de 1</span>
-                        <span class="results-info" id="resultsInfo">0 livros</span>
-                    </div>
-                    
-                    <button id="nextPage" class="btn btn-secondary" disabled>
-                        Próxima <i class="fas fa-chevron-right"></i>
-                    </button>
+            <div class="filters-section">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Buscar por livro ou autor...">
+                    <i class="fas fa-search"></i>
                 </div>
                 
-                <div id="livrosList" class="livros-grid">
-                    <div class="loading">Carregando livros...</div>
+                <div class="filter-controls">
+                    <select id="filtroPrateleira">
+                        <option value="">Todas as prateleiras</option>
+                    </select>
+                    <button id="limparFiltros" class="btn btn-secondary">Limpar Filtros</button>
                 </div>
+            </div>
 
-                <div class="pagination-controls">
-                    <button id="prevPageBottom" class="btn btn-secondary" disabled>
-                        <i class="fas fa-chevron-left"></i> Anterior
-                    </button>
-                    
-                    <div class="page-info">
-                        <span id="pageInfoBottom">Página 1 de 1</span>
-                    </div>
-                    
-                    <button id="nextPageBottom" class="btn btn-secondary" disabled>
-                        Próxima <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
+            <div class="pagination-controls">
+                <button id="prevPage" class="btn btn-secondary">Anterior</button>
+                <span id="pageInfo">Página 1 de 1</span>
+                <button id="nextPage" class="btn btn-secondary">Próxima</button>
+            </div>
+
+            <div id="livrosList" class="livros-grid">
+                <div class="loading">Carregando livros...</div>
+            </div>
+
+            <div class="pagination-controls">
+                <button id="prevPageBottom" class="btn btn-secondary">Anterior</button>
+                <span id="pageInfoBottom">Página 1 de 1</span>
+                <button id="nextPageBottom" class="btn btn-secondary">Próxima</button>
             </div>
         </div>
     </div>
 
     <div id="editModal" class="modal">
-        <div class="modal-content card">
+        <div class="modal-content">
             <span class="close">&times;</span>
-            <h2 style="color: var(--azul-principal); margin-bottom: 1.5rem;">Editar Livro</h2>
+            <h2>Editar Livro</h2>
             <form id="editForm">
                 <div class="form-group">
-                    <label for="editLivro">Livro:</label>
+                    <label for="editLivro">Nome do Livro</label>
                     <input type="text" id="editLivro" required>
                 </div>
                 <div class="form-group">
-                    <label for="editAutor">Autor:</label>
+                    <label for="editAutor">Autor</label>
                     <input type="text" id="editAutor" required>
                 </div>
                 <div class="form-group">
-                    <label for="editCategoria">Categoria:</label>
+                    <label for="editCategoria">Categoria</label>
                     <input type="text" id="editCategoria" required>
                 </div>
                 <div class="form-group">
-                    <label for="editQuantidade">Quantidade:</label>
-                    <input type="number" id="editQuantidade" min="0" required>
+                    <label for="editQuantidade">Quantidade</label>
+                    <input type="number" id="editQuantidade" min="1" required>
                 </div>
                 <div class="form-group">
-                    <label for="editPrateleira">Prateleira:</label>
+                    <label for="editPrateleira">Prateleira</label>
                     <input type="text" id="editPrateleira" required>
                 </div>
                 <div class="form-group">
-                    <label for="editBandeja">Bandeja:</label>
+                    <label for="editBandeja">Bandeja</label>
                     <input type="text" id="editBandeja" required>
                 </div>
                 <div class="button-group">
-                    <button type="button" class="btn btn-primary" onclick="salvarEdicao()">Salvar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarEdicao()">Salvar Alterações</button>
                     <button type="button" class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
                 </div>
             </form>
