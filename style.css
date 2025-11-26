@@ -581,7 +581,7 @@ input:focus, select:focus {
     background: var(--vermelho);
 }
 
-/* 🆕 ESTILOS PARA OS FILTROS */
+
 .filtros-container {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -617,7 +617,6 @@ input:focus, select:focus {
     margin-top: 1.6rem;
 }
 
-/* Responsivo */
 @media (max-width: 768px) {
     .filtros-container {
         grid-template-columns: 1fr;
@@ -756,7 +755,7 @@ input:focus, select:focus {
     }
 }
 
-/* Estilos para a nova interface de aluguel */
+
 .search-box {
     position: relative;
 }
@@ -884,3 +883,4 @@ small {
         align-items: flex-start;
     }
 }
+
