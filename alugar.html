@@ -33,20 +33,49 @@
         </header>
 
         <div class="container">
+            <div class="aluguel-controls">
+                <label class="modo-multiplo-toggle">
+                    <input type="checkbox" id="modoMultiploLivros">
+                    <span class="toggle-label">Alugar Múltiplos Livros</span>
+                </label>
+            </div>
+
             <div class="card">
                 <div class="form-title">
                     <i class="fas fa-hand-holding-usd"></i> Alugar Livro
                 </div>
                 
                 <div class="form-group">
-                    <label for="clienteNome">Nome do Cliente</label>
+                    <label for="clienteNome">Nome do Cliente *</label>
                     <input type="text" id="clienteNome" placeholder="Digite o nome do cliente" required>
                 </div>
                 
+                <div class="endereco-grid">
+                    <div class="form-group">
+                        <label for="enderecoRua">Rua *</label>
+                        <input type="text" id="enderecoRua" placeholder="Nome da rua" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="enderecoBairro">Bairro *</label>
+                        <input type="text" id="enderecoBairro" placeholder="Nome do bairro" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="enderecoNumero">Número *</label>
+                        <input type="text" id="enderecoNumero" placeholder="Número" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="enderecoComplemento">Complemento</label>
+                        <input type="text" id="enderecoComplemento" placeholder="Apto, bloco, etc.">
+                    </div>
+                </div>
+                
                 <div class="form-group">
-                    <label for="buscaLivroAlugar">Buscar Livro Disponível</label>
+                    <label for="buscaLivroAlugar">Buscar Livros</label>
                     <div class="search-box">
-                        <input type="text" id="buscaLivroAlugar" placeholder="Digite o nome do livro ou autor...">
+                        <input type="text" id="buscaLivroAlugar" placeholder="Digite nome do livro ou autor...">
                         <i class="fas fa-search"></i>
                     </div>
                 </div>
@@ -55,21 +84,15 @@
                     <div class="loading">Carregando livros disponíveis...</div>
                 </div>
 
-                <div class="livro-selecionado-card" id="livroSelecionadoCard" style="display: none;">
-                    <div class="livro-selecionado-header">
-                        <h4>Livro Selecionado:</h4>
-                        <span id="nomeLivroSelecionado"></span>
-                    </div>
-                    <div class="form-group">
-                        <label for="quantidadeAlugar">Quantidade para Alugar</label>
-                        <input type="number" id="quantidadeAlugar" min="1" value="1" required>
-                        <small id="quantidadeDisponivelInfo">Disponível: <span id="quantidadeDisponivel">0</span></small>
-                    </div>
-                </div>
+                <div id="livrosSelecionadosContainer"></div>
                 
                 <div class="button-group">
                     <button type="button" class="btn btn-primary" onclick="alugarLivro()" id="btnAlugar" disabled>
-                        <i class="fas fa-check"></i> Confirmar Aluguel
+                        <i class="fas fa-check"></i> Alugar Livro(s)
+                    </button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="limparSelecao()" id="btnLimpar">
+                        <i class="fas fa-times"></i> Limpar Seleção
                     </button>
                 </div>
             </div>
@@ -90,28 +113,52 @@
                 <div class="livros-alugados-grid" id="livrosAlugadosGrid">
                     <div class="loading">Carregando livros alugados...</div>
                 </div>
-
-                <div class="livro-selecionado-card" id="livroDevolucaoSelecionadoCard" style="display: none;">
-                    <div class="livro-selecionado-header">
-                        <h4>Livro para Devolução:</h4>
-                        <span id="nomeLivroDevolucaoSelecionado"></span>
-                    </div>
-                    <div class="form-group">
-                        <label for="quantidadeDevolver">Quantidade para Devolver</label>
-                        <input type="number" id="quantidadeDevolver" min="1" value="1" required>
-                        <small id="quantidadeAlugadaInfo">Alugado: <span id="quantidadeAlugada">0</span></small>
-                    </div>
-                </div>
                 
                 <div class="button-group">
-                    <button type="button" class="btn btn-success" onclick="devolverLivro()" id="btnDevolver" disabled>
-                        <i class="fas fa-check"></i> Confirmar Devolução
+                    <button type="button" class="btn btn-success" onclick="recarregarAlugados()" id="btnRecarregar">
+                        <i class="fas fa-sync-alt"></i> Atualizar Lista
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <div id="devolverModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="fecharModalDevolver()">&times;</span>
+            <div class="form-title">Devolver Livro</div>
+            
+            <div class="form-group">
+                <label>Cliente:</label>
+                <div id="modalClienteNome" class="modal-info"></div>
+            </div>
+            
+            <div class="form-group">
+                <label>Livro:</label>
+                <div id="modalLivroNome" class="modal-info"></div>
+            </div>
+            
+            <div class="form-group">
+                <label>Quantidade Alugada:</label>
+                <div id="modalQuantidadeAlugada" class="modal-info"></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="modalQuantidadeDevolver">Quantidade para Devolver *</label>
+                <input type="number" id="modalQuantidadeDevolver" min="1" value="1" required>
+            </div>
+            
+            <div class="button-group">
+                <button type="button" class="btn btn-success" onclick="confirmarDevolucao()">
+                    <i class="fas fa-check"></i> Confirmar Devolução
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="fecharModalDevolver()">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="alugar.js"></script>
 </body>
 </html>
